@@ -71,7 +71,8 @@
       <h1>Driver Cloud</h1>
       <h2 id="title">Đăng nhập</h2>
       <p class="sub" id="sub">Đăng nhập để vào kho lưu trữ của bạn.</p>
-      <input id="username" placeholder="Tên đăng nhập" autocomplete="username" />
+      <input id="username" placeholder="Tên đăng nhập (username)" autocomplete="username" />
+      <input id="email" type="email" placeholder="Email" autocomplete="email" style="display:none" />
       <input id="pw" type="password" placeholder="Mật khẩu" autocomplete="current-password" />
       <button id="go"></button>
       <p id="err" class="err"></p>
@@ -88,12 +89,14 @@
         $("go").textContent = login ? "Đăng nhập" : "Đăng ký";
         $("switchText").textContent = login ? "Chưa có tài khoản?" : "Đã có tài khoản?";
         $("switchLink").textContent = login ? "Đăng ký ngay" : "Đăng nhập";
+        $("email").style.display = login ? "none" : "block";
+        $("username").placeholder = login ? "Username hoặc email" : "Tên đăng nhập (username)";
         $("err").textContent = "";
       }
       $("switchLink").onclick = (e) => { e.preventDefault(); mode = mode === "login" ? "register" : "login"; applyMode(); };
       async function submit() {
         $("err").textContent = "";
-        const body = JSON.stringify({ username: $("username").value, password: $("pw").value });
+        const body = JSON.stringify({ username: $("username").value, email: $("email").value, password: $("pw").value });
         const r = await fetch("/" + mode, { method: "POST", headers: { "Content-Type": "application/json" }, body });
         const d = await r.json().catch(() => ({}));
         if (r.ok) location.href = "/"; else $("err").textContent = d.error || "Lỗi.";

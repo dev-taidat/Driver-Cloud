@@ -184,3 +184,14 @@ input:focus { outline: none; border-color: var(--blue); }
 .guide-list li { margin-bottom: 4px; }
 .redirect { display: inline-block; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-family: monospace; font-size: 12px; word-break: break-all; margin-top: 3px; user-select: all; }
 .modal-card h4 { font-size: 15px; }
+
+/* ===== Web: chuong thong bao, family, select ===== */
+.badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; background: #d93025; color: #fff; font-size: 10px; line-height: 16px; border-radius: 9px; text-align: center; font-weight: 700; }
+.notif-panel { position: absolute; top: 46px; right: 0; width: 320px; max-height: 380px; overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); z-index: 90; }
+.notif-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--line); }
+.notif-head span { font-size: 12px; font-weight: 500; color: var(--blue); cursor: pointer; }
+.notif-item { padding: 11px 14px; font-size: 13px; border-bottom: 1px solid var(--line); color: #3c4043; }
+.notif-item.unread { background: var(--bg3); }
+.notif-item .time { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.notif-empty { padding: 20px; text-align: center; color: var(--muted); font-size: 13px; }
+.fld { width: 100%; padding: 11px 13px; margin: 6px 0; border: 1px solid var(--line); border-radius: 10px; font-size: 14px; background: #fff; color: var(--text); }

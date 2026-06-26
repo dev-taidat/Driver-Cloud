@@ -17,10 +17,15 @@
           <input id="search" placeholder="Tìm trong Driver Cloud" />
           <span id="searchClear" class="search-clear hidden">✕</span>
         </div>
-        <div class="topright">
-          <span id="meName" class="muted small" style="margin-right:10px"></span>
+        <div class="topright" style="position:relative">
+          <button id="bellBtn" class="icon-btn" title="Thông báo" style="position:relative">🔔<span id="bellBadge" class="badge hidden">0</span></button>
+          <span id="meName" class="muted small" style="margin:0 8px"></span>
           <button id="openAccounts" class="icon-btn" title="Tài khoản & dung lượng">⚙️</button>
           <button id="logoutBtn" class="icon-btn" title="Đăng xuất">⏻</button>
+          <div id="notifPanel" class="notif-panel hidden">
+            <div class="notif-head">Thông báo <span id="notifRead">Đánh dấu đã đọc</span></div>
+            <div id="notifList"></div>
+          </div>
         </div>
       </header>
 
@@ -37,6 +42,7 @@
           <nav class="nav">
             <div class="nav-item active" id="navMyDrive">🗂️ Drive của tôi</div>
             <div class="nav-item" id="navShared">👥 Được chia sẻ với tôi</div>
+            <div class="nav-item" id="navFamily">👨‍👩‍👧 Family & Chia sẻ</div>
             <div class="nav-item" id="navTrash">🗑️ Thùng rác</div>
           </nav>
           <div class="storage">
@@ -89,9 +95,28 @@
         </div>
       </div>
 
+      <div id="familyModal" class="modal hidden">
+        <div class="modal-card">
+          <div class="modal-head"><h3>👨‍👩‍👧 Family & Chia sẻ</h3><span id="familyClose" class="modal-close">✕</span></div>
+          <p class="muted small">Chia sẻ cả kho hoặc một thư mục cho người khác qua <b>username</b>. Họ sẽ thấy trong mục "Được chia sẻ với tôi" và nhận thông báo 🔔.</p>
+          <label class="muted small">Chia sẻ mục</label>
+          <select id="famScope" class="fld"></select>
+          <input id="famUser" placeholder="Username người nhận" />
+          <select id="famPerm" class="fld"><option value="view">Chỉ xem & tải về</option><option value="edit">Xem + tải lên/xóa (sửa)</option></select>
+          <button id="famShareBtn" class="btn-primary full">Chia sẻ</button>
+          <p id="famErr" class="err"></p>
+          <div class="section-title" style="margin-top:10px">Bạn đang chia sẻ</div>
+          <div id="famList" class="acc-list"></div>
+        </div>
+      </div>
+
       <div id="accModal" class="modal hidden">
         <div class="modal-card">
           <div class="modal-head"><h3>Tài khoản lưu trữ</h3><span id="accClose" class="modal-close">✕</span></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+            <input id="usernameEdit" placeholder="Tên hiển thị (username)" style="flex:1;margin:0" />
+            <button id="saveUsername" class="btn-primary" style="padding:9px 14px;white-space:nowrap">Đổi tên</button>
+          </div>
           <div id="accTotal" class="acc-total muted"></div>
           <div id="accList" class="acc-list"></div>
 

@@ -279,7 +279,75 @@ $("importFile").onchange = async (e) => {
   e.target.value = "";
 };
 $("logoutBtn").onclick = async () => { await fetch("/logout", { method: "POST" }); location.reload(); };
-async function loadMe() { try { const m = await api.get("/api/me"); $("meName").textContent = m.username ? "👤 " + m.username : ""; } catch {} }
+async function loadMe() {
+  try {
+    const m = await api.get("/api/me");
+    $("meName").textContent = m.username ? "👤 " + m.username : "";
+    if ($("usernameEdit")) $("usernameEdit").value = m.username || "";
+  } catch {}
+}
+// Doi username
+if ($("saveUsername")) $("saveUsername").onclick = async () => {
+  const r = await api.post("/api/account/username", { username: $("usernameEdit").value });
+  if (r.error) return toast(r.error);
+  toast("Đã đổi tên hiển thị"); loadMe();
+};
+
+// ===== Thong bao (chuong) =====
+async function loadNotifs() {
+  try {
+    const n = await api.get("/api/notifications");
+    const b = $("bellBadge");
+    if (n.unread > 0) { b.textContent = n.unread; b.classList.remove("hidden"); } else b.classList.add("hidden");
+    const list = $("notifList");
+    list.innerHTML = n.items.length ? "" : '<div class="notif-empty">Chưa có thông báo.</div>';
+    n.items.forEach((it) => {
+      const el = document.createElement("div");
+      el.className = "notif-item" + (it.read ? "" : " unread");
+      el.innerHTML = `${escapeHtml(it.message)}<span class="time">${new Date(it.createdAt).toLocaleString("vi-VN")}</span>`;
+      list.appendChild(el);
+    });
+  } catch {}
+}
+$("bellBtn").onclick = (e) => {
+  e.stopPropagation();
+  const p = $("notifPanel");
+  p.classList.toggle("hidden");
+  if (!p.classList.contains("hidden")) loadNotifs();
+};
+$("notifRead").onclick = async () => { await api.post("/api/notifications/read"); loadNotifs(); };
+document.addEventListener("click", (e) => { if (!$("notifPanel").contains(e.target) && e.target !== $("bellBtn")) $("notifPanel").classList.add("hidden"); });
+
+// ===== Family & Chia se (quan ly) =====
+$("navFamily").onclick = () => openFamily();
+async function openFamily() {
+  // do danh sach muc co the chia se: toan bo kho + thu muc cap goc
+  const root = await api.get("/api/list?dir=/");
+  const sel = $("famScope"); sel.innerHTML = '<option value="/">Toàn bộ kho</option>';
+  (root.folders || []).forEach((p) => { const o = document.createElement("option"); o.value = p; o.textContent = p; sel.appendChild(o); });
+  $("famUser").value = ""; $("famErr").textContent = "";
+  await loadFamList();
+  show($("familyModal"));
+}
+async function loadFamList() {
+  const mine = await api.get("/api/shares/mine");
+  const box = $("famList");
+  box.innerHTML = mine.length ? "" : '<div class="muted small">Bạn chưa chia sẻ gì.</div>';
+  mine.forEach((s) => {
+    const row = document.createElement("div"); row.className = "acc-row";
+    row.innerHTML = `<div class="r"><span><b>${escapeHtml(s.name)}</b> → ${escapeHtml(s.to)} · ${s.permission === "edit" ? "sửa" : "xem"}</span><button class="rm">Thu hồi</button></div>`;
+    row.querySelector(".rm").onclick = async () => { await api.post("/api/share/revoke", { id: s.id }); loadFamList(); };
+    box.appendChild(row);
+  });
+}
+$("familyClose").onclick = () => hide($("familyModal"));
+$("familyModal").onclick = (e) => { if (e.target === $("familyModal")) hide($("familyModal")); };
+$("famShareBtn").onclick = async () => {
+  $("famErr").textContent = "";
+  const r = await api.post("/api/share", { path: $("famScope").value, toUsername: $("famUser").value, permission: $("famPerm").value });
+  if (r.error) return ($("famErr").textContent = r.error);
+  $("famUser").value = ""; loadFamList(); toast("Đã chia sẻ");
+};
 $("navMyDrive").onclick = () => { view = "drive"; searchQuery = ""; $("search").value = ""; hide($("searchClear")); setNav(); render(); };
 $("navTrash").onclick = () => { view = "trash"; setNav(); render(); };
 $("navShared").onclick = () => { view = "sharedList"; setNav(); render(); };
@@ -384,4 +452,5 @@ function sharedFileCard(f) {
 
 function toast(msg) { const el = document.createElement("div"); el.className = "toast ok"; el.textContent = msg; $("toasts").appendChild(el); setTimeout(() => el.remove(), 4000); }
 
-render(); refreshStorage(); loadMe();
+render(); refreshStorage(); loadMe(); loadNotifs();
+setInterval(loadNotifs, 30000); // kiem tra thong bao moi moi 30s

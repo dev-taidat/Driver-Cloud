@@ -17,8 +17,9 @@ import {
   listDir, findFile, createFolder, renameFolder, filesUnder, removeFolderEntries,
   renameFile, moveFile, trashFile, restoreFile, listTrash, setThumb, removeFile, baseName,
 } from "../metadata.js";
-import { register, verify, findById, findByUsername, userDir, DATA_ROOT } from "./users.js";
+import { register, verify, findById, findByUsername, setUsername, userDir, DATA_ROOT } from "./users.js";
 import { createShare, listMine, listForUser, getById, revoke, pathInShare } from "./shares.js";
+import * as notif from "./notifications.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -58,7 +59,7 @@ function reqDir(req: express.Request): string {
 // ===== Auth routes (khong can dang nhap) =====
 app.post("/register", (req, res) => {
   try {
-    const u = register(req.body.username, req.body.password);
+    const u = register(req.body.username, req.body.email, req.body.password);
     setSession(res, u.id);
     res.json({ ok: true, username: u.username });
   } catch (e: any) { res.status(400).json({ error: e.message }); }
@@ -86,8 +87,21 @@ app.use((req, res, next) => {
 
 app.get("/api/me", (req, res) => {
   const u = findById(currentUserId(req)!);
-  res.json({ username: u?.username });
+  res.json({ username: u?.username, email: u?.email });
 });
+
+// Doi username (ten hien thi)
+app.post("/api/account/username", (req, res) => {
+  try { const u = setUsername(currentUserId(req)!, req.body.username); res.json({ ok: true, username: u.username }); }
+  catch (e: any) { res.status(400).json({ error: e.message }); }
+});
+
+// Thong bao
+app.get("/api/notifications", (req, res) => {
+  const me = currentUserId(req)!;
+  res.json({ unread: notif.unreadCount(me), items: notif.listFor(me).slice(0, 30) });
+});
+app.post("/api/notifications/read", (req, res) => { notif.markAllRead(currentUserId(req)!); res.json({ ok: true }); });
 
 // Nhap (migrate) du lieu tu may desktop: oauth_client + accounts + keyfile + metadata
 app.post("/api/import", (req, res) => {
@@ -244,6 +258,8 @@ app.post("/api/share", (req, res) => {
       targetId: target.id, targetUsername: target.username,
       type: "folder", path: folderPath, permission,
     });
+    const itemName = folderPath === "/" ? "toàn bộ kho" : baseName(folderPath);
+    notif.add(target.id, `${me.username} đã chia sẻ "${itemName}" với bạn (${permission === "edit" ? "có thể sửa" : "chỉ xem"}).`, new Date().toISOString());
     res.json({ ok: true, id: s.id });
   } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
