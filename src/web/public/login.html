@@ -11,71 +11,57 @@
       html, body { height: 100%; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
       body {
         min-height: 100vh; display: flex; align-items: center; justify-content: center;
-        background: #0a0d16; color: #e7e9f0; position: relative; overflow: hidden;
+        color: #202124; position: relative; overflow: hidden;
+        background: #f5f7fb;
       }
-      /* nen toi diu: mot vang sang xanh rat nhe o tren, gan nhu tinh */
+      /* nen sang diu: vai vang mau rat nhat o goc, gan nhu tinh */
       body::before {
         content: ""; position: fixed; inset: 0; z-index: 0;
         background:
-          radial-gradient(900px 500px at 50% -10%, rgba(91,140,255,.18), transparent 60%),
-          radial-gradient(700px 500px at 85% 110%, rgba(124,91,255,.12), transparent 55%);
-      }
-      /* luoi mo nhe cho co chieu sau */
-      body::after {
-        content: ""; position: fixed; inset: 0; z-index: 0; opacity: .35;
-        background-image:
-          linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
-        background-size: 46px 46px;
-        mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 75%);
-        -webkit-mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 75%);
+          radial-gradient(800px 480px at 12% 0%, rgba(91,140,255,.14), transparent 60%),
+          radial-gradient(700px 460px at 100% 100%, rgba(124,91,255,.12), transparent 58%);
       }
 
       .card {
-        position: relative; z-index: 2; width: 384px; max-width: 92vw; padding: 36px 32px 28px;
-        background: #11131d; border: 1px solid #232838; border-radius: 16px;
-        box-shadow: 0 24px 60px rgba(0,0,0,.5);
+        position: relative; z-index: 2; width: 384px; max-width: 92vw; padding: 38px 34px 28px;
+        background: #fff; border: 1px solid #e6e8ee; border-radius: 18px;
+        box-shadow: 0 12px 40px rgba(60,64,90,.12);
         animation: rise .5s ease both;
       }
       @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-      /* vien tren co diem nhan gradient mong */
-      .card::before {
-        content: ""; position: absolute; top: 0; left: 24px; right: 24px; height: 1px;
-        background: linear-gradient(90deg, transparent, #5b8cff, #7c5bff, transparent);
-      }
 
       .logo { display: flex; justify-content: center; margin-bottom: 16px; }
       .logo img {
-        width: 64px; height: 64px; border-radius: 16px;
-        box-shadow: 0 8px 22px rgba(60,80,180,.35);
+        width: 66px; height: 66px; border-radius: 16px;
+        box-shadow: 0 10px 24px rgba(91,110,210,.28);
         animation: bob 6s ease-in-out infinite;
       }
       @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 
-      h1 { text-align: center; font-size: 22px; font-weight: 700; color: #fff; letter-spacing: .2px; }
-      h2 { text-align: center; font-size: 15px; font-weight: 600; margin-top: 18px; color: #fff; }
-      .sub { text-align: center; font-size: 13px; color: #9096a8; margin: 5px 0 20px; }
+      h1 { text-align: center; font-size: 22px; font-weight: 700; color: #1a1c23; letter-spacing: .2px; }
+      h2 { text-align: center; font-size: 15px; font-weight: 600; margin-top: 18px; color: #2a2d36; }
+      .sub { text-align: center; font-size: 13px; color: #6b7080; margin: 5px 0 20px; }
 
       input {
-        width: 100%; padding: 12px 14px; margin: 7px 0; font-size: 14px; color: #fff;
-        background: #0c0e16; border: 1px solid #2a3045; border-radius: 10px;
-        transition: border-color .15s, box-shadow .15s; outline: none;
+        width: 100%; padding: 12px 14px; margin: 7px 0; font-size: 14px; color: #1a1c23;
+        background: #f7f8fb; border: 1px solid #dfe2ea; border-radius: 10px;
+        transition: border-color .15s, box-shadow .15s, background .15s; outline: none;
       }
-      input::placeholder { color: #6b7187; }
-      input:focus { border-color: #5b8cff; box-shadow: 0 0 0 3px rgba(91,140,255,.18); }
+      input::placeholder { color: #9aa0b0; }
+      input:focus { border-color: #5b8cff; background: #fff; box-shadow: 0 0 0 3px rgba(91,140,255,.16); }
 
       button {
         width: 100%; margin-top: 14px; padding: 12px; font-size: 15px; font-weight: 600; color: #fff;
         border: none; border-radius: 10px; cursor: pointer;
         background: linear-gradient(135deg, #5b8cff, #7c5bff);
-        transition: filter .15s, transform .1s;
+        box-shadow: 0 8px 20px rgba(91,110,255,.3); transition: filter .15s, transform .1s;
       }
-      button:hover { filter: brightness(1.08); }
+      button:hover { filter: brightness(1.06); }
       button:active { transform: translateY(1px); }
 
-      .err { color: #ff8a8a; font-size: 13px; min-height: 18px; text-align: center; margin-top: 10px; }
-      .switch { text-align: center; font-size: 13px; color: #9096a8; margin-top: 4px; }
-      .switch a { color: #87a9ff; text-decoration: none; font-weight: 600; }
+      .err { color: #d93025; font-size: 13px; min-height: 18px; text-align: center; margin-top: 10px; }
+      .switch { text-align: center; font-size: 13px; color: #6b7080; margin-top: 4px; }
+      .switch a { color: #1a73e8; text-decoration: none; font-weight: 600; }
       .switch a:hover { text-decoration: underline; }
     </style>
   </head>
