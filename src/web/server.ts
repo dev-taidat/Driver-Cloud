@@ -34,7 +34,7 @@ const VID_EXT = ["mp4", "webm", "ogg", "ogv", "mov", "m4v"];
 
 const sessions = new Map<string, string>(); // sid -> userId
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "80mb" })); // metadata co the lon (thumbnail)
 
 function parseCookie(h?: string): Record<string, string> {
   const o: Record<string, string> = {};
@@ -87,6 +87,20 @@ app.use((req, res, next) => {
 app.get("/api/me", (req, res) => {
   const u = findById(currentUserId(req)!);
   res.json({ username: u?.username });
+});
+
+// Nhap (migrate) du lieu tu may desktop: oauth_client + accounts + keyfile + metadata
+app.post("/api/import", (req, res) => {
+  try {
+    const dir = reqDir(req);
+    const p = dataPaths(dir);
+    const b = req.body || {};
+    if (b.oauth_client) writeJSON(p.oauthClient, b.oauth_client);
+    if (b.accounts) writeJSON(p.accounts, b.accounts);
+    if (b.keyfile) writeJSON(p.keyfile, b.keyfile);
+    if (b.metadata) writeJSON(p.metadata, b.metadata);
+    res.json({ ok: true });
+  } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
 
 // ===== OAuth client (BYO) cua tung user =====

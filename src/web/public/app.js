@@ -267,6 +267,17 @@ function guideHtml(redirect) {
   </ol>`;
 }
 
+$("importBtn").onclick = () => $("importFile").click();
+$("importFile").onchange = async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    const bundle = JSON.parse(await file.text());
+    const r = await api.post("/api/import", bundle);
+    if (r.error) { toast("Lỗi: " + r.error); }
+    else { toast("Đã nhập dữ liệu! Đang tải lại..."); setTimeout(() => location.reload(), 800); }
+  } catch (err) { toast("File không hợp lệ."); }
+  e.target.value = "";
+};
 $("logoutBtn").onclick = async () => { await fetch("/logout", { method: "POST" }); location.reload(); };
 async function loadMe() { try { const m = await api.get("/api/me"); $("meName").textContent = m.username ? "👤 " + m.username : ""; } catch {} }
 $("navMyDrive").onclick = () => { view = "drive"; searchQuery = ""; $("search").value = ""; hide($("searchClear")); setNav(); render(); };
