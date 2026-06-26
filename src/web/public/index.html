@@ -56,6 +56,39 @@
           <div id="emptyHint" class="empty-hint hidden"><div class="big">📂</div><p>Thư mục trống. Kéo-thả tệp vào đây hoặc bấm <b>＋ Mới</b>.</p></div>
           <div class="section" id="foldersSection"><div class="section-title">Thư mục</div><div id="folders" class="grid"></div></div>
           <div class="section" id="filesSection"><div class="section-title">Tệp</div><div id="files" class="grid"></div></div>
+
+          <!-- Tab Family & Chia se (view trong noi dung chinh) -->
+          <div id="familyView" class="hidden" style="max-width:640px">
+            <p class="muted small">Chia sẻ cả kho hoặc một thư mục cho người khác qua <b>username</b>. Họ sẽ thấy trong mục "Được chia sẻ với tôi" và nhận thông báo 🔔.</p>
+            <label class="muted small">Chia sẻ mục</label>
+            <select id="famScope" class="fld"></select>
+            <input id="famUser" list="userOptions" placeholder="Username người nhận" />
+            <select id="famPerm" class="fld"><option value="view">Chỉ xem & tải về</option><option value="edit">Xem + tải lên/xóa (sửa)</option></select>
+            <button id="famShareBtn" class="btn-primary full">Chia sẻ</button>
+            <p id="famErr" class="err"></p>
+            <div class="section-title" style="margin-top:10px">Bạn đang chia sẻ dữ liệu</div>
+            <div id="famList" class="acc-list"></div>
+
+            <hr style="border:none;border-top:1px solid var(--line);margin:18px 0" />
+            <h4 style="margin:0 0 4px">💾 Farm — cấp dung lượng cho thành viên</h4>
+            <p class="muted small">Tạo <b>nhiều farm</b> (nhóm lưu trữ). Mỗi farm cấp X GB cho từng thành viên — họ có <b>kho riêng</b> (bạn không thấy file họ).</p>
+            <div style="display:flex;gap:6px;align-items:center;margin:6px 0">
+              <select id="farmSelect" class="fld" style="flex:1;margin:0"></select>
+              <button id="farmNew" class="btn-primary" style="padding:9px 12px;white-space:nowrap">+ Farm</button>
+              <button id="farmRename" style="padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:8px" title="Đổi tên farm">✏️</button>
+              <button id="farmDelete" style="padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--err)" title="Xóa farm">🗑️</button>
+            </div>
+            <div id="farmBody">
+              <input id="grantUser" list="userOptions" placeholder="Username thành viên" />
+              <input id="grantGB" type="number" min="1" placeholder="Số GB (vd 50)" class="fld" />
+              <button id="grantBtn" class="btn-primary full">Cấp dung lượng vào farm này</button>
+              <p id="grantErr" class="err"></p>
+              <div class="section-title" style="margin-top:10px">Thành viên <span id="famSummary" class="muted small" style="font-weight:400"></span></div>
+              <div id="grantList" class="acc-list"></div>
+            </div>
+            <p id="farmEmpty" class="muted small hidden">Chưa có farm nào. Bấm <b>+ Farm</b> để tạo.</p>
+          </div>
+
           <div id="dropOverlay" class="drop-overlay hidden"><div>Thả để tải lên</div></div>
         </main>
       </div>
@@ -93,40 +126,6 @@
           <p id="shareErr" class="err"></p>
           <div class="section-title" style="margin-top:8px">Đang chia sẻ thư mục này với</div>
           <div id="shareList" class="acc-list"></div>
-        </div>
-      </div>
-
-      <div id="familyModal" class="modal hidden">
-        <div class="modal-card">
-          <div class="modal-head"><h3>👨‍👩‍👧 Family & Chia sẻ</h3><span id="familyClose" class="modal-close">✕</span></div>
-          <p class="muted small">Chia sẻ cả kho hoặc một thư mục cho người khác qua <b>username</b>. Họ sẽ thấy trong mục "Được chia sẻ với tôi" và nhận thông báo 🔔.</p>
-          <label class="muted small">Chia sẻ mục</label>
-          <select id="famScope" class="fld"></select>
-          <input id="famUser" list="userOptions" placeholder="Username người nhận" />
-          <select id="famPerm" class="fld"><option value="view">Chỉ xem & tải về</option><option value="edit">Xem + tải lên/xóa (sửa)</option></select>
-          <button id="famShareBtn" class="btn-primary full">Chia sẻ</button>
-          <p id="famErr" class="err"></p>
-          <div class="section-title" style="margin-top:10px">Bạn đang chia sẻ dữ liệu</div>
-          <div id="famList" class="acc-list"></div>
-
-          <hr style="border:none;border-top:1px solid var(--line);margin:16px 0" />
-          <h4 style="margin:0 0 4px">💾 Farm — cấp dung lượng cho thành viên</h4>
-          <p class="muted small">Tạo <b>nhiều farm</b> (nhóm lưu trữ). Mỗi farm cấp X GB cho từng thành viên — họ có <b>kho riêng</b> (bạn không thấy file họ).</p>
-          <div style="display:flex;gap:6px;align-items:center;margin:6px 0">
-            <select id="farmSelect" class="fld" style="flex:1;margin:0"></select>
-            <button id="farmNew" class="btn-primary" style="padding:9px 12px;white-space:nowrap">+ Farm</button>
-            <button id="farmRename" style="padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:8px" title="Đổi tên farm">✏️</button>
-            <button id="farmDelete" style="padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--err)" title="Xóa farm">🗑️</button>
-          </div>
-          <div id="farmBody">
-            <input id="grantUser" list="userOptions" placeholder="Username thành viên" />
-            <input id="grantGB" type="number" min="1" placeholder="Số GB (vd 50)" class="fld" />
-            <button id="grantBtn" class="btn-primary full">Cấp dung lượng vào farm này</button>
-            <p id="grantErr" class="err"></p>
-            <div class="section-title" style="margin-top:10px">Thành viên <span id="famSummary" class="muted small" style="font-weight:400"></span></div>
-            <div id="grantList" class="acc-list"></div>
-          </div>
-          <p id="farmEmpty" class="muted small hidden">Chưa có farm nào. Bấm <b>+ Farm</b> để tạo.</p>
         </div>
       </div>
 

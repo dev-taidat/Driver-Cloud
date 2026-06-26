@@ -18,6 +18,9 @@ function iconFor(n){const e=ext(n);
 
 // ===== Render =====
 async function render() {
+  const fv = document.getElementById("familyView");
+  if (fv) fv.classList.add("hidden");
+  if (view === "family") return renderFamily();
   if (view === "trash") return renderTrash();
   if (view === "sharedList") return renderSharedList();
   if (view === "shared") return renderShared();
@@ -67,6 +70,7 @@ function navTo(d){ view="drive"; setNav(); currentDir=d; render(); }
 function setNav(){
   $("navMyDrive").classList.toggle("active", view==="drive");
   $("navShared").classList.toggle("active", view==="sharedList" || view==="shared");
+  $("navFamily").classList.toggle("active", view==="family");
   $("navTrash").classList.toggle("active", view==="trash");
 }
 
@@ -337,9 +341,14 @@ $("bellBtn").onclick = (e) => {
 $("notifRead").onclick = async () => { await api.post("/api/notifications/read"); loadNotifs(); };
 document.addEventListener("click", (e) => { if (!$("notifPanel").contains(e.target) && e.target !== $("bellBtn")) $("notifPanel").classList.add("hidden"); });
 
-// ===== Family & Chia se (quan ly) =====
-$("navFamily").onclick = () => openFamily();
-async function openFamily() {
+// ===== Family & Chia se (TAB trong noi dung chinh) =====
+$("navFamily").onclick = () => { view = "family"; searchQuery = ""; $("search").value = ""; hide($("searchClear")); setNav(); render(); };
+async function renderFamily() {
+  $("crumbs").innerHTML = '<span class="crumb last">👨‍👩‍👧 Family & Chia sẻ</span>';
+  $("foldersSection").classList.add("hidden");
+  $("filesSection").classList.add("hidden");
+  $("emptyHint").classList.add("hidden");
+  $("familyView").classList.remove("hidden");
   // do danh sach muc co the chia se: toan bo kho + thu muc cap goc
   const root = await api.get("/api/list?dir=/");
   const sel = $("famScope"); sel.innerHTML = '<option value="/">Toàn bộ kho</option>';
@@ -347,7 +356,6 @@ async function openFamily() {
   $("famUser").value = ""; $("famErr").textContent = "";
   await loadFamList();
   await loadFarms();
-  show($("familyModal"));
 }
 
 // ===== Quan ly NHIEU farm =====
@@ -425,8 +433,6 @@ async function loadFamList() {
     box.appendChild(row);
   });
 }
-$("familyClose").onclick = () => hide($("familyModal"));
-$("familyModal").onclick = (e) => { if (e.target === $("familyModal")) hide($("familyModal")); };
 $("famShareBtn").onclick = async () => {
   $("famErr").textContent = "";
   const r = await api.post("/api/share", { path: $("famScope").value, toUsername: $("famUser").value, permission: $("famPerm").value });
