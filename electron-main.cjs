@@ -1,6 +1,6 @@
 // Tien trinh chinh cua Electron (CommonJS de tranh loi ESM-interop cua Electron).
 // Engine viet bang ESM nen duoc nap qua dynamic import() khi app san sang.
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Tray, Menu, nativeImage } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -76,6 +76,34 @@ function createWindow() {
   const indexPath = path.join(APP_ROOT, "renderer", "index.html");
   console.log("[main] loading", indexPath, "exists?", fs.existsSync(indexPath));
   win.loadFile(indexPath);
+
+  // Dong cua so = thu nho xuong khay (chay ngam), khong thoat han
+  win.on("close", (e) => {
+    if (!app.isQuitting) { e.preventDefault(); win.hide(); }
+  });
+}
+
+let tray = null;
+function createTray() {
+  if (tray) return;
+  let img = nativeImage.createFromPath(path.join(APP_ROOT, "build", "icon.png"));
+  if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 });
+  tray = new Tray(img.isEmpty() ? path.join(APP_ROOT, "build", "icon.ico") : img);
+  tray.setToolTip("Driver Cloud");
+  const showWin = () => { if (!win || win.isDestroyed()) createWindow(); else { win.show(); win.focus(); } };
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Mở Driver Cloud", click: showWin },
+      {
+        label: "Khởi động cùng máy", type: "checkbox",
+        checked: app.getLoginItemSettings().openAtLogin,
+        click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked, openAsHidden: true }),
+      },
+      { type: "separator" },
+      { label: "Thoát", click: () => { app.isQuitting = true; app.quit(); } },
+    ])
+  );
+  tray.on("double-click", showWin);
 }
 
 function send(channel, data) {
@@ -379,10 +407,10 @@ app.whenReady().then(async () => {
   });
   registerIpc();
   createWindow();
+  createTray();
 });
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+// Khong thoat khi dong cua so - app chay ngam trong khay (chi thoat qua menu Thoat)
+app.on("window-all-closed", () => {});
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });

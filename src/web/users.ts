@@ -39,6 +39,14 @@ export function findByEmail(email: string): User | undefined {
 export function findById(id: string): User | undefined {
   return readUsers().find((u) => u.id === id);
 }
+// Goi y username (cho o chia se) - tra ve username chua tien to q, tru chinh minh
+export function searchUsernames(q: string, excludeId: string, limit = 8): string[] {
+  const s = (q || "").toLowerCase().trim();
+  return readUsers()
+    .filter((u) => u.id !== excludeId && (!s || u.username.toLowerCase().includes(s)))
+    .slice(0, limit)
+    .map((u) => u.username);
+}
 
 export function register(username: string, email: string, password: string): User {
   username = (username || "").trim();

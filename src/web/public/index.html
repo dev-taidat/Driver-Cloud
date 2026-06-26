@@ -67,6 +67,7 @@
 
       <div id="toasts"></div>
       <div id="ctxMenu" class="ctx hidden"></div>
+      <datalist id="userOptions"></datalist>
 
       <div id="viewer" class="viewer hidden">
         <div class="viewer-bar">
@@ -83,7 +84,7 @@
         <div class="modal-card">
           <div class="modal-head"><h3>Chia sẻ thư mục</h3><span id="shareClose" class="modal-close">✕</span></div>
           <p class="muted small" id="shareTarget"></p>
-          <input id="shareUser" placeholder="Tên đăng nhập người nhận" />
+          <input id="shareUser" list="userOptions" placeholder="Tên đăng nhập người nhận" />
           <select id="sharePerm" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin:6px 0">
             <option value="view">Chỉ xem & tải về</option>
             <option value="edit">Xem + tải lên/xóa (sửa)</option>
@@ -105,7 +106,7 @@
           <p class="muted small">Chia sẻ cả kho hoặc một thư mục cho người khác qua <b>username</b>. Họ sẽ thấy trong mục "Được chia sẻ với tôi" và nhận thông báo 🔔.</p>
           <label class="muted small">Chia sẻ mục</label>
           <select id="famScope" class="fld"></select>
-          <input id="famUser" placeholder="Username người nhận" />
+          <input id="famUser" list="userOptions" placeholder="Username người nhận" />
           <select id="famPerm" class="fld"><option value="view">Chỉ xem & tải về</option><option value="edit">Xem + tải lên/xóa (sửa)</option></select>
           <button id="famShareBtn" class="btn-primary full">Chia sẻ</button>
           <p id="famErr" class="err"></p>
@@ -115,7 +116,7 @@
           <hr style="border:none;border-top:1px solid var(--line);margin:16px 0" />
           <h4 style="margin:0 0 4px">💾 Cấp dung lượng cho thành viên</h4>
           <p class="muted small">Cấp X GB từ pool của bạn cho thành viên. Họ có <b>kho riêng</b> (bạn không thấy file họ, họ không thấy file bạn).</p>
-          <input id="grantUser" placeholder="Username thành viên" />
+          <input id="grantUser" list="userOptions" placeholder="Username thành viên" />
           <input id="grantGB" type="number" min="1" placeholder="Số GB (vd 50)" class="fld" />
           <button id="grantBtn" class="btn-primary full">Cấp dung lượng</button>
           <p id="grantErr" class="err"></p>

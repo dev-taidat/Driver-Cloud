@@ -19,7 +19,7 @@ import {
   grantFiles, grantUsage,
 } from "../metadata.js";
 import * as grants from "./grants.js";
-import { register, verify, findById, findByUsername, setUsername, setFamilyName, userDir, DATA_ROOT } from "./users.js";
+import { register, verify, findById, findByUsername, setUsername, setFamilyName, searchUsernames, userDir, DATA_ROOT } from "./users.js";
 import { createShare, listMine, listForUser, getById, revoke, pathInShare } from "./shares.js";
 import * as notif from "./notifications.js";
 
@@ -104,6 +104,9 @@ app.get("/api/notifications", (req, res) => {
   res.json({ unread: notif.unreadCount(me), items: notif.listFor(me).slice(0, 30) });
 });
 app.post("/api/notifications/read", (req, res) => { notif.markAllRead(currentUserId(req)!); res.json({ ok: true }); });
+
+// Goi y username khi go o chia se
+app.get("/api/users/search", (req, res) => res.json(searchUsernames(String(req.query.q || ""), currentUserId(req)!)));
 
 // Nhap (migrate) du lieu tu may desktop: oauth_client + accounts + keyfile + metadata
 app.post("/api/import", (req, res) => {

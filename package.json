@@ -41,7 +41,8 @@
       "electron-main.cjs",
       "preload.cjs",
       "renderer/**/*",
-      "build/icon.ico"
+      "build/icon.ico",
+      "build/icon.png"
     ],
     "directories": {
       "output": "release"

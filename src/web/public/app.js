@@ -355,6 +355,19 @@ async function loadGrantList() {
   });
 }
 $("saveFamilyName").onclick = async () => { await api.post("/api/family/name", { name: $("familyName").value }); toast("Đã lưu tên nhóm"); };
+
+// Goi y username khi go (cho cac o chia se/cap)
+async function refreshUserOptions(q) {
+  try {
+    const users = await api.get("/api/users/search?q=" + encodeURIComponent(q || ""));
+    $("userOptions").innerHTML = users.map((u) => `<option value="${escapeHtml(u)}"></option>`).join("");
+  } catch {}
+}
+["shareUser", "famUser", "grantUser"].forEach((id) => {
+  const el = $(id);
+  if (el) el.addEventListener("input", () => refreshUserOptions(el.value));
+  if (el) el.addEventListener("focus", () => refreshUserOptions(el.value));
+});
 $("grantBtn").onclick = async () => {
   $("grantErr").textContent = "";
   const r = await api.post("/api/family/grant", { memberUsername: $("grantUser").value, quotaGB: Number($("grantGB").value) });
