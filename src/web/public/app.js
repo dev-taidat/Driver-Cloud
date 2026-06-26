@@ -329,16 +329,35 @@ async function openFamily() {
   (root.folders || []).forEach((p) => { const o = document.createElement("option"); o.value = p; o.textContent = p; sel.appendChild(o); });
   $("famUser").value = ""; $("famErr").textContent = "";
   await loadFamList();
-  await loadGrantList();
+  await loadFarms();
   show($("familyModal"));
 }
-async function loadGrantList() {
-  const fam = await api.get("/api/family");
-  if ($("familyName")) $("familyName").value = fam.name || "";
-  $("famSummary").textContent = fam.members.length ? `· ${fam.members.length} thành viên · đã cấp ${gb(fam.totalAllocated).toFixed(0)} GB` : "";
+
+// ===== Quan ly NHIEU farm =====
+let curFarm = null;
+async function loadFarms() {
+  const list = await api.get("/api/farms");
+  const sel = $("farmSelect");
+  const has = list.length > 0;
+  $("farmBody").classList.toggle("hidden", !has);
+  $("farmEmpty").classList.toggle("hidden", has);
+  $("farmRename").style.display = has ? "" : "none";
+  $("farmDelete").style.display = has ? "" : "none";
+  if (!has) { sel.innerHTML = ""; curFarm = null; return; }
+  // giu farm dang chon neu con
+  if (!list.find((f) => f.id === curFarm)) curFarm = list[0].id;
+  sel.innerHTML = list.map((f) => `<option value="${f.id}">${escapeHtml(f.name)} (${f.memberCount} tv · ${gb(f.totalAllocated).toFixed(0)} GB)</option>`).join("");
+  sel.value = curFarm;
+  await loadFarmMembers();
+}
+async function loadFarmMembers() {
+  curFarm = $("farmSelect").value;
+  const members = await api.get(`/api/farms/members?farmId=${encodeURIComponent(curFarm)}`);
+  const totalGB = members.reduce((s, m) => s + m.quotaBytes, 0);
+  $("famSummary").textContent = members.length ? `· ${members.length} thành viên · ${gb(totalGB).toFixed(0)} GB` : "";
   const box = $("grantList");
-  box.innerHTML = fam.members.length ? "" : '<div class="muted small">Chưa cấp dung lượng cho ai.</div>';
-  fam.members.forEach((g) => {
+  box.innerHTML = members.length ? "" : '<div class="muted small">Farm này chưa có thành viên.</div>';
+  members.forEach((g) => {
     const pct = g.quotaBytes > 0 ? Math.min(100, (g.usedBytes / g.quotaBytes) * 100) : 0;
     const row = document.createElement("div"); row.className = "acc-row";
     row.innerHTML = `
@@ -349,12 +368,15 @@ async function loadGrantList() {
         <button class="save btn-primary" style="padding:6px 12px">Lưu</button>
         <button class="rm" style="padding:6px 10px">Xóa</button>
       </div>`;
-    row.querySelector(".save").onclick = async () => { await api.post("/api/family/grant/quota", { grantId: g.id, quotaGB: Number(row.querySelector(".qedit").value) }); loadGrantList(); toast("Đã đổi hạn mức"); };
-    row.querySelector(".rm").onclick = async () => { if (confirm(`Xóa thành viên ${g.member} khỏi nhóm? (thu hồi dung lượng)`)) { await api.post("/api/family/grant/revoke", { grantId: g.id }); loadGrantList(); } };
+    row.querySelector(".save").onclick = async () => { await api.post("/api/family/grant/quota", { grantId: g.id, quotaGB: Number(row.querySelector(".qedit").value) }); loadFarms(); toast("Đã đổi hạn mức"); };
+    row.querySelector(".rm").onclick = async () => { if (confirm(`Xóa ${g.member} khỏi farm? (thu hồi dung lượng)`)) { await api.post("/api/family/grant/revoke", { grantId: g.id }); loadFarms(); } };
     box.appendChild(row);
   });
 }
-$("saveFamilyName").onclick = async () => { await api.post("/api/family/name", { name: $("familyName").value }); toast("Đã lưu tên nhóm"); };
+$("farmSelect").onchange = () => loadFarmMembers();
+$("farmNew").onclick = async () => { const n = prompt("Tên farm mới:"); if (n) { const r = await api.post("/api/farms", { name: n }); curFarm = r.id; loadFarms(); toast("Đã tạo farm"); } };
+$("farmRename").onclick = async () => { if (!curFarm) return; const n = prompt("Tên farm mới:"); if (n) { await api.post("/api/farms/rename", { id: curFarm, name: n }); loadFarms(); } };
+$("farmDelete").onclick = async () => { if (!curFarm) return; if (confirm("Xóa farm này? (thu hồi dung lượng của mọi thành viên trong farm)")) { await api.post("/api/farms/delete", { id: curFarm }); curFarm = null; loadFarms(); } };
 
 // Goi y username khi go (cho cac o chia se/cap)
 async function refreshUserOptions(q) {
@@ -369,10 +391,11 @@ async function refreshUserOptions(q) {
   if (el) el.addEventListener("focus", () => refreshUserOptions(el.value));
 });
 $("grantBtn").onclick = async () => {
+  if (!curFarm) return ($("grantErr").textContent = "Tạo hoặc chọn farm trước.");
   $("grantErr").textContent = "";
-  const r = await api.post("/api/family/grant", { memberUsername: $("grantUser").value, quotaGB: Number($("grantGB").value) });
+  const r = await api.post("/api/family/grant", { farmId: curFarm, memberUsername: $("grantUser").value, quotaGB: Number($("grantGB").value) });
   if (r.error) return ($("grantErr").textContent = r.error);
-  $("grantUser").value = ""; $("grantGB").value = ""; loadGrantList(); toast("Đã cấp dung lượng");
+  $("grantUser").value = ""; $("grantGB").value = ""; loadFarms(); toast("Đã cấp dung lượng");
 };
 async function loadFamList() {
   const mine = await api.get("/api/shares/mine");
@@ -441,7 +464,7 @@ async function renderSharedList() {
   const box = $("folders"); box.innerHTML = "";
   granted.forEach((g) => {
     const el = document.createElement("div"); el.className = "card";
-    el.innerHTML = `<span class="ic">💾</span><div class="nm"><div class="t">Bộ nhớ từ ${escapeHtml(g.owner)}</div><div class="s">${gb(g.usedBytes).toFixed(2)} / ${gb(g.quotaBytes).toFixed(0)} GB</div></div>`;
+    el.innerHTML = `<span class="ic">💾</span><div class="nm"><div class="t">${escapeHtml(g.farm || "Bộ nhớ")} · từ ${escapeHtml(g.owner)}</div><div class="s">${gb(g.usedBytes).toFixed(2)} / ${gb(g.quotaBytes).toFixed(0)} GB</div></div>`;
     el.onclick = () => { view = "granted"; currentGrant = { grantId: g.grantId, owner: g.owner, quotaBytes: g.quotaBytes }; setNav(); render(); };
     box.appendChild(el);
   });

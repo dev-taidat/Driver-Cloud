@@ -9,6 +9,7 @@ const FILE = path.join(DATA_ROOT, "grants.json");
 
 export interface Grant {
   id: string;
+  farmId: string;
   ownerId: string;
   ownerUsername: string;
   memberId: string;
@@ -27,7 +28,8 @@ function write(list: Grant[]): void {
 
 export function createGrant(g: Omit<Grant, "id" | "createdAt">): Grant {
   const list = read();
-  const existing = list.find((x) => x.ownerId === g.ownerId && x.memberId === g.memberId);
+  // 1 thanh vien trong 1 farm chi co 1 grant -> trung thi cap nhat quota
+  const existing = list.find((x) => x.farmId === g.farmId && x.memberId === g.memberId);
   if (existing) { existing.quotaBytes = g.quotaBytes; write(list); return existing; }
   const grant: Grant = { ...g, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
   list.push(grant);
@@ -35,6 +37,7 @@ export function createGrant(g: Omit<Grant, "id" | "createdAt">): Grant {
   return grant;
 }
 export function listByOwner(ownerId: string): Grant[] { return read().filter((g) => g.ownerId === ownerId); }
+export function listByFarm(farmId: string): Grant[] { return read().filter((g) => g.farmId === farmId); }
 export function listByMember(memberId: string): Grant[] { return read().filter((g) => g.memberId === memberId); }
 export function getById(id: string): Grant | undefined { return read().find((g) => g.id === id); }
 export function setQuota(id: string, ownerId: string, quotaBytes: number): void {
@@ -43,4 +46,7 @@ export function setQuota(id: string, ownerId: string, quotaBytes: number): void 
 }
 export function revoke(id: string, ownerId: string): void {
   write(read().filter((g) => !(g.id === id && g.ownerId === ownerId)));
+}
+export function revokeByFarm(farmId: string): void {
+  write(read().filter((g) => g.farmId !== farmId));
 }

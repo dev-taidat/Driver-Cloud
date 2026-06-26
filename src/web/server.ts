@@ -19,6 +19,7 @@ import {
   grantFiles, grantUsage,
 } from "../metadata.js";
 import * as grants from "./grants.js";
+import * as farms from "./farms.js";
 import { register, verify, findById, findByUsername, setUsername, setFamilyName, searchUsernames, userDir, DATA_ROOT } from "./users.js";
 import { createShare, listMine, listForUser, getById, revoke, pathInShare } from "./shares.js";
 import * as notif from "./notifications.js";
@@ -371,41 +372,57 @@ app.post("/api/shared/upload", (req, res) => {
 // ===================== FAMILY: CAP DUNG LUONG (storage grant) =====================
 const GB = 1024 * 1024 * 1024;
 
-// CHU pool: cap dung luong cho 1 thanh vien
+// ===== Quan ly NHIEU FARM (nhom luu tru) =====
+app.get("/api/farms", (req, res) => {
+  const dir = reqDir(req); const me = currentUserId(req)!;
+  res.json(farms.listByOwner(me).map((f) => {
+    const gs = grants.listByFarm(f.id);
+    return { id: f.id, name: f.name, memberCount: gs.length, totalAllocated: gs.reduce((s, g) => s + g.quotaBytes, 0) };
+  }));
+});
+app.post("/api/farms", (req, res) => { const f = farms.createFarm(currentUserId(req)!, req.body.name); res.json({ ok: true, id: f.id }); });
+app.post("/api/farms/rename", (req, res) => { farms.rename(req.body.id, currentUserId(req)!, req.body.name); res.json({ ok: true }); });
+app.post("/api/farms/delete", (req, res) => {
+  const f = farms.getById(req.body.id);
+  if (f && f.ownerId === currentUserId(req)) { grants.revokeByFarm(f.id); farms.remove(f.id, f.ownerId); }
+  res.json({ ok: true });
+});
+// Thanh vien trong 1 farm (kem da dung)
+app.get("/api/farms/members", (req, res) => {
+  const dir = reqDir(req);
+  res.json(grants.listByFarm(String(req.query.farmId || "")).map((g) => ({
+    id: g.id, member: g.memberUsername, quotaBytes: g.quotaBytes, usedBytes: grantUsage(g.id, dir),
+  })));
+});
+
+// CHU: cap dung luong cho 1 thanh vien TRONG 1 FARM
 app.post("/api/family/grant", (req, res) => {
   try {
     const me = findById(currentUserId(req)!)!;
+    const farm = farms.getById(String(req.body.farmId || ""));
+    if (!farm || farm.ownerId !== me.id) throw new Error("Chọn farm hợp lệ trước.");
     const member = findByUsername(String(req.body.memberUsername || "").trim());
     if (!member) throw new Error("Không tìm thấy người dùng.");
     if (member.id === me.id) throw new Error("Không thể cấp cho chính mình.");
     const quotaBytes = Math.max(0, Number(req.body.quotaGB) || 0) * GB;
     if (quotaBytes <= 0) throw new Error("Dung lượng phải lớn hơn 0.");
     const g = grants.createGrant({
-      ownerId: me.id, ownerUsername: me.username,
+      farmId: farm.id, ownerId: me.id, ownerUsername: me.username,
       memberId: member.id, memberUsername: member.username, quotaBytes,
     });
-    notif.add(member.id, `${me.username} đã cấp cho bạn ${req.body.quotaGB} GB lưu trữ.`, new Date().toISOString());
+    notif.add(member.id, `${me.username} đã cấp cho bạn ${req.body.quotaGB} GB trong farm "${farm.name}".`, new Date().toISOString());
     res.json({ ok: true, id: g.id });
   } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
-// CHU: thong tin nhom Family (ten + thanh vien + tong da cap)
-app.get("/api/family", (req, res) => {
-  const dir = reqDir(req);
-  const u = findById(currentUserId(req)!)!;
-  const members = grants.listByOwner(u.id).map((g) => ({
-    id: g.id, member: g.memberUsername, quotaBytes: g.quotaBytes, usedBytes: grantUsage(g.id, dir),
-  }));
-  res.json({ name: u.familyName || "", members, totalAllocated: members.reduce((s, m) => s + m.quotaBytes, 0) });
-});
-app.post("/api/family/name", (req, res) => { setFamilyName(currentUserId(req)!, req.body.name); res.json({ ok: true }); });
 app.post("/api/family/grant/quota", (req, res) => { grants.setQuota(req.body.grantId, currentUserId(req)!, (Number(req.body.quotaGB) || 0) * GB); res.json({ ok: true }); });
 app.post("/api/family/grant/revoke", (req, res) => { grants.revoke(req.body.grantId, currentUserId(req)!); res.json({ ok: true }); });
 
-// THANH VIEN: cac kho duoc cap cho minh
+// THANH VIEN: cac kho duoc cap cho minh (kem ten farm)
 app.get("/api/granted", (req, res) => {
   const me = currentUserId(req)!;
   res.json(grants.listByMember(me).map((g) => ({
-    grantId: g.id, owner: g.ownerUsername, quotaBytes: g.quotaBytes, usedBytes: grantUsage(g.id, userDir(g.ownerId)),
+    grantId: g.id, owner: g.ownerUsername, farm: farms.getById(g.farmId)?.name || "Farm",
+    quotaBytes: g.quotaBytes, usedBytes: grantUsage(g.id, userDir(g.ownerId)),
   })));
 });
 

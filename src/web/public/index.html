@@ -99,10 +99,6 @@
       <div id="familyModal" class="modal hidden">
         <div class="modal-card">
           <div class="modal-head"><h3>👨‍👩‍👧 Family & Chia sẻ</h3><span id="familyClose" class="modal-close">✕</span></div>
-          <div style="display:flex;gap:8px;align-items:center;margin:4px 0 14px">
-            <input id="familyName" placeholder="Tên nhóm Family (vd: Gia đình Đạt)" style="flex:1;margin:0" />
-            <button id="saveFamilyName" class="btn-primary" style="padding:9px 14px;white-space:nowrap">Lưu tên</button>
-          </div>
           <p class="muted small">Chia sẻ cả kho hoặc một thư mục cho người khác qua <b>username</b>. Họ sẽ thấy trong mục "Được chia sẻ với tôi" và nhận thông báo 🔔.</p>
           <label class="muted small">Chia sẻ mục</label>
           <select id="famScope" class="fld"></select>
@@ -114,14 +110,23 @@
           <div id="famList" class="acc-list"></div>
 
           <hr style="border:none;border-top:1px solid var(--line);margin:16px 0" />
-          <h4 style="margin:0 0 4px">💾 Cấp dung lượng cho thành viên</h4>
-          <p class="muted small">Cấp X GB từ pool của bạn cho thành viên. Họ có <b>kho riêng</b> (bạn không thấy file họ, họ không thấy file bạn).</p>
-          <input id="grantUser" list="userOptions" placeholder="Username thành viên" />
-          <input id="grantGB" type="number" min="1" placeholder="Số GB (vd 50)" class="fld" />
-          <button id="grantBtn" class="btn-primary full">Cấp dung lượng</button>
-          <p id="grantErr" class="err"></p>
-          <div class="section-title" style="margin-top:10px">Thành viên trong nhóm <span id="famSummary" class="muted small" style="font-weight:400"></span></div>
-          <div id="grantList" class="acc-list"></div>
+          <h4 style="margin:0 0 4px">💾 Farm — cấp dung lượng cho thành viên</h4>
+          <p class="muted small">Tạo <b>nhiều farm</b> (nhóm lưu trữ). Mỗi farm cấp X GB cho từng thành viên — họ có <b>kho riêng</b> (bạn không thấy file họ).</p>
+          <div style="display:flex;gap:6px;align-items:center;margin:6px 0">
+            <select id="farmSelect" class="fld" style="flex:1;margin:0"></select>
+            <button id="farmNew" class="btn-primary" style="padding:9px 12px;white-space:nowrap">+ Farm</button>
+            <button id="farmRename" style="padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:8px" title="Đổi tên farm">✏️</button>
+            <button id="farmDelete" style="padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--err)" title="Xóa farm">🗑️</button>
+          </div>
+          <div id="farmBody">
+            <input id="grantUser" list="userOptions" placeholder="Username thành viên" />
+            <input id="grantGB" type="number" min="1" placeholder="Số GB (vd 50)" class="fld" />
+            <button id="grantBtn" class="btn-primary full">Cấp dung lượng vào farm này</button>
+            <p id="grantErr" class="err"></p>
+            <div class="section-title" style="margin-top:10px">Thành viên <span id="famSummary" class="muted small" style="font-weight:400"></span></div>
+            <div id="grantList" class="acc-list"></div>
+          </div>
+          <p id="farmEmpty" class="muted small hidden">Chưa có farm nào. Bấm <b>+ Farm</b> để tạo.</p>
         </div>
       </div>
 
