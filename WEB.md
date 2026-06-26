@@ -1,49 +1,45 @@
-# Driver Cloud — Bản Web
+# Driver Cloud — Bản Web (SaaS nhiều người dùng)
 
 Server web tái dùng toàn bộ engine (gộp account, không chia file, mã hóa, thùng rác,
-thư mục, preview). Code ở [src/web/](src/web/).
+thư mục, preview). Code ở [src/web/](src/web/). Đã deploy mẫu trên Railway.
+
+## Tính năng
+- **Đăng ký / Đăng nhập** bằng username + email (login bằng username hoặc email).
+- Mỗi user có **kho riêng** (Drive accounts + dữ liệu tách biệt). Đồng bộ qua server.
+- **Kết nối nhiều Google Drive** (BYO OAuth, có hướng dẫn setup console trong app).
+- Thư mục, upload kéo-thả + **hủy**, mã hóa, **thùng rác** (API Google thật), thumbnail ảnh,
+  **xem ảnh/video trong app**, tải về, **tìm kiếm toàn bộ**.
+- 👥 **Chia sẻ dữ liệu**: chia sẻ cả kho hoặc 1 thư mục cho user khác (xem / sửa).
+- 👨‍👩‍👧 **Family — nhiều Farm**: tạo nhiều farm (nhóm lưu trữ), trong mỗi farm **cấp X GB**
+  cho từng thành viên (kho riêng của họ, bạn không thấy file họ). **Chặn quota ngay** khi vượt.
+  Quản lý: tạo/đổi tên/xóa farm, sửa hạn mức, xem đã dùng từng người.
+- 🔔 **Thông báo** (chuông + badge) khi được chia sẻ / cấp dung lượng.
+- Gợi ý username khi nhập, đổi username.
 
 ## Chạy thử trên máy (localhost)
-
 ```bash
 npm install
-WEB_PASSWORD=matkhaucuaban npm run web
-# Mo trinh duyet: http://localhost:3000
+npm run web
+# Mo http://localhost:3000 -> Dang ky -> ⚙️ nhap OAuth (co huong dan) -> ket noi Drive
 ```
+> Localhost dùng được OAuth client **Desktop** hiện tại (Google cho phép loopback). Khi
+> đăng nhập gặp "unverified app" → Advanced → Go to Driver Cloud.
 
-- `WEB_PASSWORD`: mật khẩu đăng nhập web (nếu không đặt, server in ra 1 mật khẩu tạm).
-- Đăng nhập → bấm ⚙️ → **＋ Thêm tài khoản Google** để kết nối acc (qua OAuth).
+## Deploy online (Railway / VPS / Render)
+1. Push code lên GitHub (đã có repo dev-taidat/Driver-Cloud).
+2. Railway → New Project → GitHub Repository → chọn repo (đọc `Procfile` → `npm run web`).
+3. **⚠️ Thêm Volume** mount `/data` + biến `DATA_ROOT=/data` (BẮT BUỘC — nếu không, redeploy
+   mất sạch user + khóa mã hóa).
+4. Settings → Networking → Generate Domain → đặt biến `BASE_URL=https://<domain>`.
+5. Mỗi user tạo **OAuth Web client** với redirect `https://<domain>/oauth/callback`.
 
-> Chạy localhost dùng được luôn OAuth client **Desktop** hiện tại (Google cho phép loopback).
+## Di chuyển dữ liệu từ desktop sang web (Import)
+App desktop có dữ liệu ở `~/.driver-cloud`. Tạo file bundle gộp `oauth_client.json`,
+`accounts.json`, `keyfile.json`, `metadata.json` → vào web ⚙️ → **Nhập dữ liệu từ máy (.json)**.
 
-## Deploy online (vào từ mọi nơi) — 3 việc bạn phải làm
+## ⚠️ Bảo mật
+Server giữ refresh_token + khóa mã hóa của user → dùng host tin cậy, HTTPS, không lộ link.
 
-### 1. Tạo OAuth client loại **Web application**
-Google Cloud Console → **Clients** → Create client → **Web application**:
-- **Authorized redirect URIs**: thêm `https://TÊN-MIỀN-CỦA-BẠN/oauth/callback`
-- Lấy Client ID/Secret mới, ghi vào `~/.driver-cloud/oauth_client.json` **trên server**.
-
-### 2. Deploy lên 1 host chạy Node 18+ (VD: Render, Railway, VPS)
-Đặt biến môi trường:
-```
-BASE_URL=https://TÊN-MIỀN-CỦA-BẠN      # bắt buộc, để Google redirect đúng
-WEB_PASSWORD=mat-khau-manh             # bắt buộc
-PORT=3000                              # hoặc theo host
-```
-Lệnh chạy: `npm install && npm run web`
-
-### 3. Kết nối lại các tài khoản trên server
-Dữ liệu (token, khóa, metadata) nằm ở `~/.driver-cloud/` **trên server**, tách biệt với máy
-cá nhân. Lần đầu deploy là trống → đăng nhập web → ⚙️ → Thêm từng acc Google lại.
-(Hoặc copy thư mục `~/.driver-cloud/` từ máy bạn lên server nếu muốn giữ nguyên dữ liệu cũ.)
-
-## ⚠️ Cảnh báo bảo mật (QUAN TRỌNG)
-- Server giữ **refresh_token + khóa mã hóa** của tất cả acc. Ai chiếm được server = chiếm
-  toàn bộ 5 acc 30TB. → Dùng host riêng tin cậy, HTTPS, mật khẩu mạnh, không chia sẻ link.
-- Mọi file upload/download đều **đi qua server** (user → server → Drive), nên băng thông và
-  tốc độ phụ thuộc server. File lớn sẽ tốn băng thông server gấp đôi.
-
-## Hạn chế bản web hiện tại (v1)
-- Tìm kiếm chỉ trong thư mục đang mở (chưa tìm toàn bộ).
-- Chưa có thanh tiến trình cho tải về (trình duyệt tự tải).
-- Chưa hỗ trợ nhiều người dùng (1 mật khẩu chung).
+## Còn lại (milestone riêng)
+- **Mount ổ đĩa ảo** (hiện thành ổ đĩa/Finder như Google Drive File Stream) — cần
+  WinFsp/macFUSE, là dự án riêng lớn.

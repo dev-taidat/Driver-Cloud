@@ -16,7 +16,7 @@ import { writeJSON, dataPaths } from "../config.js";
 import {
   listDir, findFile, createFolder, renameFolder, filesUnder, removeFolderEntries,
   renameFile, moveFile, trashFile, restoreFile, listTrash, setThumb, removeFile, baseName,
-  grantFiles, grantUsage,
+  grantFiles, grantUsage, listFiles,
 } from "../metadata.js";
 import * as grants from "./grants.js";
 import * as farms from "./farms.js";
@@ -164,6 +164,12 @@ app.get("/api/list", (req, res) => {
   res.json({ folders: r.folders, files: r.files.map((f) => mapFile(f, em)) });
 });
 app.get("/api/trash", (req, res) => { const dir = reqDir(req); const em = emailMap(dir); res.json(listTrash(dir).map((f) => mapFile(f, em))); });
+// Tim kiem TOAN BO file cua minh theo ten (tru thung rac va file cua thanh vien)
+app.get("/api/search", (req, res) => {
+  const dir = reqDir(req); const em = emailMap(dir);
+  const q = String(req.query.q || "").toLowerCase();
+  res.json(listFiles(dir).filter((f) => !f.trashed && !f.grantId && f.name.toLowerCase().includes(q)).map((f) => mapFile(f, em)));
+});
 app.post("/api/folder", (req, res) => res.json({ path: createFolder(req.body.dir || "/", req.body.name, reqDir(req)) }));
 app.post("/api/folder/rename", (req, res) => { renameFolder(req.body.dir, req.body.newName, reqDir(req)); res.json({ ok: true }); });
 app.post("/api/rename", (req, res) => { renameFile(req.body.id, req.body.newName, reqDir(req)); res.json({ ok: true }); });

@@ -34,13 +34,11 @@ async function render() {
   files.forEach((f) => $("files").appendChild(fileCard(f)));
 }
 async function renderSearch() {
-  const all = await api.get(`/api/list?dir=/`); // search toan bo: gom tu moi noi
-  // de don gian: tim trong thu muc hien tai + de quy qua endpoint list la phuc tap -> dung trash+walk khong co; tam tim trong dir hien tai
-  const q = searchQuery.toLowerCase();
-  const files = (all.files || []).filter((f) => f.name.toLowerCase().includes(q));
-  $("crumbs").innerHTML = `<span class="crumb last">Kết quả "${escapeHtml(searchQuery)}"</span>`;
+  const files = await api.get(`/api/search?q=${encodeURIComponent(searchQuery)}`); // tim TOAN BO file
+  $("crumbs").innerHTML = `<span class="crumb last">Kết quả "${escapeHtml(searchQuery)}" (${files.length})</span>`;
   $("foldersSection").classList.add("hidden"); $("filesSection").classList.remove("hidden");
   $("emptyHint").classList.toggle("hidden", files.length > 0);
+  if (!files.length) $("emptyHint").querySelector("p").innerHTML = "Không tìm thấy tệp nào.";
   $("files").innerHTML = ""; files.forEach((f) => $("files").appendChild(fileCard(f)));
 }
 async function renderTrash() {
