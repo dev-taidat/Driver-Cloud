@@ -94,6 +94,7 @@ function fileCard(f) {
   const menu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, [
     { icon:"👁️", label:"Mở / Xem", fn:()=>openPreview(f) },
     { icon:"⬇️", label:"Tải về", fn:()=>downloadFile(f.id) },
+    { icon:"📂", label:"Chuyển tới…", fn:()=>openMove(f) },
     { icon:"✏️", label:"Đổi tên", fn:async()=>{const n=prompt("Tên mới:",f.name); if(n&&n!==f.name){await api.post("/api/rename",{id:f.id,newName:n});render();}} },
     { icon:"🗑️", label:"Xóa", danger:true, fn:async()=>{await api.post("/api/remove",{id:f.id});toast("Đã chuyển vào thùng rác");render();refreshStorage();} },
   ]); };
@@ -292,6 +293,24 @@ if ($("saveUsername")) $("saveUsername").onclick = async () => {
   if (r.error) return toast(r.error);
   toast("Đã đổi tên hiển thị"); loadMe();
 };
+if ($("savePw")) $("savePw").onclick = async () => {
+  const r = await api.post("/api/account/password", { oldPw: $("oldPw").value, newPw: $("newPw").value });
+  if (r.error) return toast(r.error);
+  $("oldPw").value = ""; $("newPw").value = ""; toast("Đã đổi mật khẩu");
+};
+
+// ===== Di chuyen file giua thu muc =====
+let moveFileId = null;
+async function openMove(f) {
+  moveFileId = f.id;
+  $("moveFileName").textContent = `Chuyển "${f.name}" tới:`;
+  const folders = await api.get("/api/folders");
+  $("moveSelect").innerHTML = folders.map((p) => `<option value="${p}">${p === "/" ? "/ (gốc)" : escapeHtml(p)}</option>`).join("");
+  show($("moveModal"));
+}
+$("moveClose").onclick = () => hide($("moveModal"));
+$("moveModal").onclick = (e) => { if (e.target === $("moveModal")) hide($("moveModal")); };
+$("moveBtn").onclick = async () => { await api.post("/api/move", { id: moveFileId, dir: $("moveSelect").value }); hide($("moveModal")); render(); toast("Đã chuyển"); };
 
 // ===== Thong bao (chuong) =====
 async function loadNotifs() {

@@ -130,12 +130,26 @@
         </div>
       </div>
 
+      <div id="moveModal" class="modal hidden">
+        <div class="modal-card">
+          <div class="modal-head"><h3>Chuyển tới thư mục</h3><span id="moveClose" class="modal-close">✕</span></div>
+          <p class="muted small" id="moveFileName"></p>
+          <select id="moveSelect" class="fld"></select>
+          <button id="moveBtn" class="btn-primary full">Chuyển</button>
+        </div>
+      </div>
+
       <div id="accModal" class="modal hidden">
         <div class="modal-card">
           <div class="modal-head"><h3>Tài khoản lưu trữ</h3><span id="accClose" class="modal-close">✕</span></div>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
             <input id="usernameEdit" placeholder="Tên hiển thị (username)" style="flex:1;margin:0" />
             <button id="saveUsername" class="btn-primary" style="padding:9px 14px;white-space:nowrap">Đổi tên</button>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px">
+            <input id="oldPw" type="password" placeholder="Mật khẩu hiện tại" style="flex:1;margin:0" />
+            <input id="newPw" type="password" placeholder="Mật khẩu mới" style="flex:1;margin:0" />
+            <button id="savePw" class="btn-primary" style="padding:9px 12px;white-space:nowrap">Đổi MK</button>
           </div>
           <div id="accTotal" class="acc-total muted"></div>
           <div id="accList" class="acc-list"></div>

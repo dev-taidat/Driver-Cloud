@@ -75,6 +75,17 @@ export function verify(usernameOrEmail: string, password: string): User | null {
   return null;
 }
 
+export function changePassword(userId: string, oldPw: string, newPw: string): void {
+  const users = readUsers();
+  const u = users.find((x) => x.id === userId);
+  if (!u) throw new Error("Không tìm thấy tài khoản.");
+  if (hashPw(oldPw || "", u.salt) !== u.hash) throw new Error("Mật khẩu hiện tại sai.");
+  if ((newPw || "").length < 4) throw new Error("Mật khẩu mới tối thiểu 4 ký tự.");
+  u.salt = crypto.randomBytes(16).toString("hex");
+  u.hash = hashPw(newPw, u.salt);
+  writeUsers(users);
+}
+
 export function setFamilyName(userId: string, name: string): void {
   const users = readUsers();
   const u = users.find((x) => x.id === userId);

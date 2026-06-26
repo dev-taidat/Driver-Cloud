@@ -16,11 +16,11 @@ import { writeJSON, dataPaths } from "../config.js";
 import {
   listDir, findFile, createFolder, renameFolder, filesUnder, removeFolderEntries,
   renameFile, moveFile, trashFile, restoreFile, listTrash, setThumb, removeFile, baseName,
-  grantFiles, grantUsage, listFiles,
+  grantFiles, grantUsage, listFiles, listFolders,
 } from "../metadata.js";
 import * as grants from "./grants.js";
 import * as farms from "./farms.js";
-import { register, verify, findById, findByUsername, setUsername, setFamilyName, searchUsernames, userDir, DATA_ROOT } from "./users.js";
+import { register, verify, findById, findByUsername, setUsername, setFamilyName, changePassword, searchUsernames, userDir, DATA_ROOT } from "./users.js";
 import { createShare, listMine, listForUser, getById, revoke, pathInShare } from "./shares.js";
 import * as notif from "./notifications.js";
 
@@ -98,6 +98,13 @@ app.post("/api/account/username", (req, res) => {
   try { const u = setUsername(currentUserId(req)!, req.body.username); res.json({ ok: true, username: u.username }); }
   catch (e: any) { res.status(400).json({ error: e.message }); }
 });
+// Doi mat khau dang nhap
+app.post("/api/account/password", (req, res) => {
+  try { changePassword(currentUserId(req)!, req.body.oldPw, req.body.newPw); res.json({ ok: true }); }
+  catch (e: any) { res.status(400).json({ error: e.message }); }
+});
+// Tat ca thu muc (de chon khi di chuyen file)
+app.get("/api/folders", (req, res) => res.json(["/", ...listFolders(reqDir(req)).sort()]));
 
 // Thong bao
 app.get("/api/notifications", (req, res) => {
