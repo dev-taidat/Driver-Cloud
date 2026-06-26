@@ -333,16 +333,28 @@ async function openFamily() {
   show($("familyModal"));
 }
 async function loadGrantList() {
-  const gs = await api.get("/api/family/grants");
+  const fam = await api.get("/api/family");
+  if ($("familyName")) $("familyName").value = fam.name || "";
+  $("famSummary").textContent = fam.members.length ? `· ${fam.members.length} thành viên · đã cấp ${gb(fam.totalAllocated).toFixed(0)} GB` : "";
   const box = $("grantList");
-  box.innerHTML = gs.length ? "" : '<div class="muted small">Chưa cấp dung lượng cho ai.</div>';
-  gs.forEach((g) => {
+  box.innerHTML = fam.members.length ? "" : '<div class="muted small">Chưa cấp dung lượng cho ai.</div>';
+  fam.members.forEach((g) => {
+    const pct = g.quotaBytes > 0 ? Math.min(100, (g.usedBytes / g.quotaBytes) * 100) : 0;
     const row = document.createElement("div"); row.className = "acc-row";
-    row.innerHTML = `<div class="r"><span><b>${escapeHtml(g.member)}</b> · ${gb(g.usedBytes).toFixed(2)} / ${gb(g.quotaBytes).toFixed(0)} GB</span><button class="rm">Thu hồi</button></div>`;
-    row.querySelector(".rm").onclick = async () => { if (confirm(`Thu hồi dung lượng đã cấp cho ${g.member}?`)) { await api.post("/api/family/grant/revoke", { grantId: g.id }); loadGrantList(); } };
+    row.innerHTML = `
+      <div class="r"><span><b>${escapeHtml(g.member)}</b></span><span class="muted small">${gb(g.usedBytes).toFixed(2)} / ${gb(g.quotaBytes).toFixed(0)} GB</span></div>
+      <div class="mini"><div style="width:${pct}%"></div></div>
+      <div style="display:flex;gap:6px;margin-top:7px">
+        <input class="qedit fld" type="number" min="1" value="${Math.round(gb(g.quotaBytes))}" style="flex:1;margin:0;padding:6px 9px" />
+        <button class="save btn-primary" style="padding:6px 12px">Lưu</button>
+        <button class="rm" style="padding:6px 10px">Xóa</button>
+      </div>`;
+    row.querySelector(".save").onclick = async () => { await api.post("/api/family/grant/quota", { grantId: g.id, quotaGB: Number(row.querySelector(".qedit").value) }); loadGrantList(); toast("Đã đổi hạn mức"); };
+    row.querySelector(".rm").onclick = async () => { if (confirm(`Xóa thành viên ${g.member} khỏi nhóm? (thu hồi dung lượng)`)) { await api.post("/api/family/grant/revoke", { grantId: g.id }); loadGrantList(); } };
     box.appendChild(row);
   });
 }
+$("saveFamilyName").onclick = async () => { await api.post("/api/family/name", { name: $("familyName").value }); toast("Đã lưu tên nhóm"); };
 $("grantBtn").onclick = async () => {
   $("grantErr").textContent = "";
   const r = await api.post("/api/family/grant", { memberUsername: $("grantUser").value, quotaGB: Number($("grantGB").value) });

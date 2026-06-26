@@ -12,6 +12,7 @@ export interface User {
   salt: string;
   hash: string;
   createdAt: string;
+  familyName?: string;
 }
 
 function readUsers(): User[] {
@@ -64,6 +65,12 @@ export function verify(usernameOrEmail: string, password: string): User | null {
   const h = hashPw(password, u.salt);
   if (h.length === u.hash.length && crypto.timingSafeEqual(Buffer.from(h), Buffer.from(u.hash))) return u;
   return null;
+}
+
+export function setFamilyName(userId: string, name: string): void {
+  const users = readUsers();
+  const u = users.find((x) => x.id === userId);
+  if (u) { u.familyName = (name || "").trim().slice(0, 40); writeUsers(users); }
 }
 
 // Doi username (cho tai khoan da ton tai)

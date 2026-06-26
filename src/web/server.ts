@@ -19,7 +19,7 @@ import {
   grantFiles, grantUsage,
 } from "../metadata.js";
 import * as grants from "./grants.js";
-import { register, verify, findById, findByUsername, setUsername, userDir, DATA_ROOT } from "./users.js";
+import { register, verify, findById, findByUsername, setUsername, setFamilyName, userDir, DATA_ROOT } from "./users.js";
 import { createShare, listMine, listForUser, getById, revoke, pathInShare } from "./shares.js";
 import * as notif from "./notifications.js";
 
@@ -385,13 +385,16 @@ app.post("/api/family/grant", (req, res) => {
     res.json({ ok: true, id: g.id });
   } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
-// CHU: danh sach grant da cap (kem da dung)
-app.get("/api/family/grants", (req, res) => {
+// CHU: thong tin nhom Family (ten + thanh vien + tong da cap)
+app.get("/api/family", (req, res) => {
   const dir = reqDir(req);
-  res.json(grants.listByOwner(currentUserId(req)!).map((g) => ({
+  const u = findById(currentUserId(req)!)!;
+  const members = grants.listByOwner(u.id).map((g) => ({
     id: g.id, member: g.memberUsername, quotaBytes: g.quotaBytes, usedBytes: grantUsage(g.id, dir),
-  })));
+  }));
+  res.json({ name: u.familyName || "", members, totalAllocated: members.reduce((s, m) => s + m.quotaBytes, 0) });
 });
+app.post("/api/family/name", (req, res) => { setFamilyName(currentUserId(req)!, req.body.name); res.json({ ok: true }); });
 app.post("/api/family/grant/quota", (req, res) => { grants.setQuota(req.body.grantId, currentUserId(req)!, (Number(req.body.quotaGB) || 0) * GB); res.json({ ok: true }); });
 app.post("/api/family/grant/revoke", (req, res) => { grants.revoke(req.body.grantId, currentUserId(req)!); res.json({ ok: true }); });
 
@@ -421,6 +424,11 @@ app.post("/api/granted/upload", (req, res) => {
   let g: any, ownerDir: string;
   try { ({ g, ownerDir } = myGrant(req, String(req.query.grantId))); }
   catch (e: any) { return res.status(403).json({ error: e.message }); }
+  // CHAN NGAY TU DAU: dua vao Content-Length, khong nhan file neu se vuot quota
+  const contentLength = Number(req.headers["content-length"] || 0);
+  if (contentLength && grantUsage(g.id, ownerDir) + contentLength > g.quotaBytes) {
+    return res.status(400).json({ error: "Vượt dung lượng được cấp — đã chặn." });
+  }
   const key = ensureKeyNoPassword(ownerDir);
   const bb = busboy({ headers: req.headers });
   let finished = false;
