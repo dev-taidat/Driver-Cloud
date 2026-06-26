@@ -21,6 +21,7 @@ async function render() {
   if (view === "trash") return renderTrash();
   if (view === "sharedList") return renderSharedList();
   if (view === "shared") return renderShared();
+  if (view === "granted") return renderGranted();
   if (searchQuery) return renderSearch();
   const { folders, files } = await api.get(`/api/list?dir=${encodeURIComponent(currentDir)}`);
   renderCrumbs();
@@ -140,8 +141,9 @@ function downloadFile(id){ window.location = `/api/download/${id}`; }
 
 // ===== New / Upload =====
 $("newBtn").onclick = (e) => { e.stopPropagation(); $("newMenu").classList.toggle("hidden"); };
-function canWriteHere() { return view === "drive" || (view === "shared" && currentShare && currentShare.permission === "edit"); }
+function canWriteHere() { return view === "drive" || view === "granted" || (view === "shared" && currentShare && currentShare.permission === "edit"); }
 function uploadEndpoint() {
+  if (view === "granted") return `/api/granted/upload?grantId=${encodeURIComponent(currentGrant.grantId)}`;
   if (view === "shared") return `/api/shared/upload?shareId=${encodeURIComponent(currentShare.shareId)}&dir=${encodeURIComponent(currentShare.dir)}`;
   return `/api/upload?dir=${encodeURIComponent(currentDir)}`;
 }
@@ -327,8 +329,26 @@ async function openFamily() {
   (root.folders || []).forEach((p) => { const o = document.createElement("option"); o.value = p; o.textContent = p; sel.appendChild(o); });
   $("famUser").value = ""; $("famErr").textContent = "";
   await loadFamList();
+  await loadGrantList();
   show($("familyModal"));
 }
+async function loadGrantList() {
+  const gs = await api.get("/api/family/grants");
+  const box = $("grantList");
+  box.innerHTML = gs.length ? "" : '<div class="muted small">Chưa cấp dung lượng cho ai.</div>';
+  gs.forEach((g) => {
+    const row = document.createElement("div"); row.className = "acc-row";
+    row.innerHTML = `<div class="r"><span><b>${escapeHtml(g.member)}</b> · ${gb(g.usedBytes).toFixed(2)} / ${gb(g.quotaBytes).toFixed(0)} GB</span><button class="rm">Thu hồi</button></div>`;
+    row.querySelector(".rm").onclick = async () => { if (confirm(`Thu hồi dung lượng đã cấp cho ${g.member}?`)) { await api.post("/api/family/grant/revoke", { grantId: g.id }); loadGrantList(); } };
+    box.appendChild(row);
+  });
+}
+$("grantBtn").onclick = async () => {
+  $("grantErr").textContent = "";
+  const r = await api.post("/api/family/grant", { memberUsername: $("grantUser").value, quotaGB: Number($("grantGB").value) });
+  if (r.error) return ($("grantErr").textContent = r.error);
+  $("grantUser").value = ""; $("grantGB").value = ""; loadGrantList(); toast("Đã cấp dung lượng");
+};
 async function loadFamList() {
   const mine = await api.get("/api/shares/mine");
   const box = $("famList");
@@ -384,19 +404,61 @@ $("shareBtn").onclick = async () => {
 
 // ===== Chia se: duyet =====
 let currentShare = null;
+let currentGrant = null;
+function gb(bytes) { return (bytes / 1024 ** 3); }
 async function renderSharedList() {
-  const shares = await api.get("/api/shared-with-me");
+  const [shares, granted] = await Promise.all([api.get("/api/shared-with-me"), api.get("/api/granted")]);
   $("crumbs").innerHTML = '<span class="crumb last">Được chia sẻ với tôi</span>';
   $("foldersSection").classList.remove("hidden"); $("filesSection").classList.add("hidden");
-  $("emptyHint").classList.toggle("hidden", shares.length > 0);
-  if (!shares.length) $("emptyHint").querySelector("p").innerHTML = "Chưa có ai chia sẻ gì cho bạn.";
+  const total = shares.length + granted.length;
+  $("emptyHint").classList.toggle("hidden", total > 0);
+  if (!total) $("emptyHint").querySelector("p").innerHTML = "Chưa có ai chia sẻ hay cấp dung lượng cho bạn.";
   const box = $("folders"); box.innerHTML = "";
+  granted.forEach((g) => {
+    const el = document.createElement("div"); el.className = "card";
+    el.innerHTML = `<span class="ic">💾</span><div class="nm"><div class="t">Bộ nhớ từ ${escapeHtml(g.owner)}</div><div class="s">${gb(g.usedBytes).toFixed(2)} / ${gb(g.quotaBytes).toFixed(0)} GB</div></div>`;
+    el.onclick = () => { view = "granted"; currentGrant = { grantId: g.grantId, owner: g.owner, quotaBytes: g.quotaBytes }; setNav(); render(); };
+    box.appendChild(el);
+  });
   shares.forEach((s) => {
     const el = document.createElement("div"); el.className = "card";
     el.innerHTML = `<span class="ic">👥</span><div class="nm"><div class="t">${escapeHtml(s.name)}</div><div class="s">từ ${escapeHtml(s.owner)} · ${s.permission === "edit" ? "có thể sửa" : "chỉ xem"}</div></div>`;
     el.onclick = () => { view = "shared"; currentShare = { shareId: s.shareId, base: s.path, dir: s.path, permission: s.permission, owner: s.owner }; setNav(); render(); };
     box.appendChild(el);
   });
+}
+
+// ===== Member: dung kho duoc cap (grant) =====
+async function renderGranted() {
+  const r = await api.get(`/api/granted/list?grantId=${encodeURIComponent(currentGrant.grantId)}`);
+  if (r.error) { toast(r.error); view = "sharedList"; setNav(); return render(); }
+  currentGrant.quotaBytes = r.quotaBytes;
+  const used = gb(r.usedBytes).toFixed(2), q = gb(r.quotaBytes).toFixed(0);
+  const box = $("crumbs"); box.innerHTML = "";
+  const back = document.createElement("span"); back.className = "crumb"; back.textContent = "Được chia sẻ với tôi"; back.onclick = () => { view = "sharedList"; setNav(); render(); }; box.appendChild(back);
+  const sep = document.createElement("span"); sep.className = "crumb-sep"; sep.textContent = "›"; box.appendChild(sep);
+  const cur = document.createElement("span"); cur.className = "crumb last"; cur.textContent = `Bộ nhớ từ ${currentGrant.owner} — ${used}/${q} GB`; box.appendChild(cur);
+  $("foldersSection").classList.add("hidden");
+  $("filesSection").classList.remove("hidden");
+  $("emptyHint").classList.toggle("hidden", r.files.length > 0);
+  if (!r.files.length) $("emptyHint").querySelector("p").innerHTML = `Kho riêng của bạn (${q} GB). Kéo-thả tệp để tải lên.`;
+  $("files").innerHTML = "";
+  r.files.forEach((f) => $("files").appendChild(grantedFileCard(f)));
+}
+function grantedFileCard(f) {
+  const gid = currentGrant.grantId;
+  const previewUrl = `/api/granted/preview/${gid}/${f.id}`, dlUrl = `/api/granted/download/${gid}/${f.id}`;
+  const el = document.createElement("div"); el.className = "card";
+  const ic = f.thumb ? `<img class="thumb" src="${f.thumb}">` : `<span class="ic">${iconFor(f.name)}</span>`;
+  el.innerHTML = `${ic}<div class="nm"><div class="t">${escapeHtml(f.name)}</div><div class="s">${human(f.size)}</div></div><span class="more">⋮</span>`;
+  el.ondblclick = () => openPreview(f, previewUrl, dlUrl);
+  const menu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, [
+    { icon: "👁️", label: "Mở / Xem", fn: () => openPreview(f, previewUrl, dlUrl) },
+    { icon: "⬇️", label: "Tải về", fn: () => (window.location = dlUrl) },
+    { icon: "🗑️", label: "Xóa", danger: true, fn: async () => { await api.post("/api/granted/remove", { grantId: gid, id: f.id }); render(); } },
+  ]); };
+  el.querySelector(".more").onclick = menu; el.oncontextmenu = menu;
+  return el;
 }
 async function renderShared() {
   const r = await api.get(`/api/shared/list?shareId=${encodeURIComponent(currentShare.shareId)}&dir=${encodeURIComponent(currentShare.dir)}`);

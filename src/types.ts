@@ -40,6 +40,7 @@ export interface LogicalFile {
   trashed?: boolean;   // true = dang o thung rac
   trashedAt?: string;
   thumb?: string;      // data URI thumbnail (chi cho anh)
+  grantId?: string;    // neu set: file nay thuoc kho duoc CAP cho 1 thanh vien (luu trong pool chu so huu)
 }
 
 // Ke hoach gan tung block vao account nao

@@ -16,7 +16,9 @@ import { writeJSON, dataPaths } from "../config.js";
 import {
   listDir, findFile, createFolder, renameFolder, filesUnder, removeFolderEntries,
   renameFile, moveFile, trashFile, restoreFile, listTrash, setThumb, removeFile, baseName,
+  grantFiles, grantUsage,
 } from "../metadata.js";
+import * as grants from "./grants.js";
 import { register, verify, findById, findByUsername, setUsername, userDir, DATA_ROOT } from "./users.js";
 import { createShare, listMine, listForUser, getById, revoke, pathInShare } from "./shares.js";
 import * as notif from "./notifications.js";
@@ -361,6 +363,104 @@ app.post("/api/shared/upload", (req, res) => {
   });
   bb.on("error", (e: any) => res.status(500).json({ error: e.message }));
   req.pipe(bb);
+});
+
+// ===================== FAMILY: CAP DUNG LUONG (storage grant) =====================
+const GB = 1024 * 1024 * 1024;
+
+// CHU pool: cap dung luong cho 1 thanh vien
+app.post("/api/family/grant", (req, res) => {
+  try {
+    const me = findById(currentUserId(req)!)!;
+    const member = findByUsername(String(req.body.memberUsername || "").trim());
+    if (!member) throw new Error("Không tìm thấy người dùng.");
+    if (member.id === me.id) throw new Error("Không thể cấp cho chính mình.");
+    const quotaBytes = Math.max(0, Number(req.body.quotaGB) || 0) * GB;
+    if (quotaBytes <= 0) throw new Error("Dung lượng phải lớn hơn 0.");
+    const g = grants.createGrant({
+      ownerId: me.id, ownerUsername: me.username,
+      memberId: member.id, memberUsername: member.username, quotaBytes,
+    });
+    notif.add(member.id, `${me.username} đã cấp cho bạn ${req.body.quotaGB} GB lưu trữ.`, new Date().toISOString());
+    res.json({ ok: true, id: g.id });
+  } catch (e: any) { res.status(400).json({ error: e.message }); }
+});
+// CHU: danh sach grant da cap (kem da dung)
+app.get("/api/family/grants", (req, res) => {
+  const dir = reqDir(req);
+  res.json(grants.listByOwner(currentUserId(req)!).map((g) => ({
+    id: g.id, member: g.memberUsername, quotaBytes: g.quotaBytes, usedBytes: grantUsage(g.id, dir),
+  })));
+});
+app.post("/api/family/grant/quota", (req, res) => { grants.setQuota(req.body.grantId, currentUserId(req)!, (Number(req.body.quotaGB) || 0) * GB); res.json({ ok: true }); });
+app.post("/api/family/grant/revoke", (req, res) => { grants.revoke(req.body.grantId, currentUserId(req)!); res.json({ ok: true }); });
+
+// THANH VIEN: cac kho duoc cap cho minh
+app.get("/api/granted", (req, res) => {
+  const me = currentUserId(req)!;
+  res.json(grants.listByMember(me).map((g) => ({
+    grantId: g.id, owner: g.ownerUsername, quotaBytes: g.quotaBytes, usedBytes: grantUsage(g.id, userDir(g.ownerId)),
+  })));
+});
+
+function myGrant(req: express.Request, grantId: string) {
+  const g = grants.getById(grantId);
+  if (!g || g.memberId !== currentUserId(req)) throw new Error("Không có quyền.");
+  return { g, ownerDir: userDir(g.ownerId) };
+}
+// THANH VIEN: liet ke file trong kho duoc cap (phang)
+app.get("/api/granted/list", (req, res) => {
+  try {
+    const { g, ownerDir } = myGrant(req, String(req.query.grantId));
+    const em = emailMap(ownerDir);
+    res.json({ quotaBytes: g.quotaBytes, usedBytes: grantUsage(g.id, ownerDir), files: grantFiles(g.id, ownerDir).map((f) => mapFile(f, em)) });
+  } catch (e: any) { res.status(403).json({ error: e.message }); }
+});
+// THANH VIEN: upload vao kho duoc cap (enforce quota)
+app.post("/api/granted/upload", (req, res) => {
+  let g: any, ownerDir: string;
+  try { ({ g, ownerDir } = myGrant(req, String(req.query.grantId))); }
+  catch (e: any) { return res.status(403).json({ error: e.message }); }
+  const key = ensureKeyNoPassword(ownerDir);
+  const bb = busboy({ headers: req.headers });
+  let finished = false;
+  bb.on("file", (_n, stream, info) => {
+    const tmpPath = path.join(TMP, crypto.randomUUID() + "_" + info.filename);
+    const ws = fs.createWriteStream(tmpPath); stream.pipe(ws);
+    ws.on("close", async () => {
+      if (finished) return; finished = true;
+      try {
+        const size = fs.statSync(tmpPath).size;
+        if (grantUsage(g.id, ownerDir) + size > g.quotaBytes) { fs.unlink(tmpPath, () => {}); return res.status(400).json({ error: "Vượt dung lượng được cấp." }); }
+        const lg = await uploadFile(tmpPath, key, { dir: "/", dataDir: ownerDir, grantId: g.id });
+        const ext = (info.filename.split(".").pop() || "").toLowerCase();
+        if (IMG_EXT.includes(ext)) {
+          try { const sharp = (await import("sharp")).default; const buf = await sharp(tmpPath).rotate().resize(300, 300, { fit: "cover" }).webp({ quality: 72 }).toBuffer(); setThumb(lg.id, "data:image/webp;base64," + buf.toString("base64"), ownerDir); } catch {}
+        }
+        fs.unlink(tmpPath, () => {}); res.json({ ok: true, id: lg.id });
+      } catch (e: any) { fs.unlink(tmpPath, () => {}); res.status(500).json({ error: e.message }); }
+    });
+  });
+  bb.on("error", (e: any) => res.status(500).json({ error: e.message }));
+  req.pipe(bb);
+});
+async function grantedFile(req: express.Request, grantId: string, id: string) {
+  const { g, ownerDir } = myGrant(req, grantId);
+  const f = findFile(id, ownerDir);
+  if (!f || f.grantId !== g.id) throw new Error("Không thuộc kho của bạn.");
+  return { g, ownerDir, f };
+}
+app.get("/api/granted/download/:grantId/:id", async (req, res) => {
+  try { const { ownerDir, f } = await grantedFile(req, req.params.grantId, req.params.id); const out = path.join(TMP, "g_" + req.params.id + "_" + f.name); if (!fs.existsSync(out) || fs.statSync(out).size !== f.size) await downloadFile(f.id, out, ensureKeyNoPassword(ownerDir), { dataDir: ownerDir }); res.download(out, f.name); }
+  catch (e: any) { res.status(403).send(e.message); }
+});
+app.get("/api/granted/preview/:grantId/:id", async (req, res) => {
+  try { const { ownerDir, f } = await grantedFile(req, req.params.grantId, req.params.id); const out = path.join(TMP, "g_" + req.params.id + "_" + f.name); if (!fs.existsSync(out) || fs.statSync(out).size !== f.size) await downloadFile(f.id, out, ensureKeyNoPassword(ownerDir), { dataDir: ownerDir }); const ext = (f.name.split(".").pop() || "").toLowerCase(); if (IMG_EXT.includes(ext) || VID_EXT.includes(ext)) res.sendFile(out); else res.download(out, f.name); }
+  catch (e: any) { res.status(403).send(e.message); }
+});
+app.post("/api/granted/remove", async (req, res) => {
+  try { const { ownerDir, f } = await grantedFile(req, req.body.grantId, req.body.id); await setChunksTrashed(f, true, ownerDir); trashFile(f.id, new Date().toISOString(), ownerDir); res.json({ ok: true }); }
+  catch (e: any) { res.status(403).json({ error: e.message }); }
 });
 
 app.use(express.static(PUBLIC_DIR));

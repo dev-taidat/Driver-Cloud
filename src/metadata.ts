@@ -107,8 +107,22 @@ export function createFolder(dir: string, name: string, dataDir: string = DATA_D
 export function listDir(dir: string, dataDir: string = DATA_DIR): { folders: string[]; files: LogicalFile[] } {
   const store = load(dataDir);
   const folders = store.folders.filter((f) => parentOf(f) === dir).sort();
-  const files = store.files.filter((f) => f.dir === dir && !f.trashed);
+  // kho cua chu: loai file thuoc grant (cua thanh vien) va file trong thung rac
+  const files = store.files.filter((f) => f.dir === dir && !f.trashed && !f.grantId);
   return { folders, files };
+}
+
+// ===== Kho duoc cap cho thanh vien (grant) - luu trong metadata cua CHU pool =====
+export function grantFiles(grantId: string, dataDir: string = DATA_DIR): LogicalFile[] {
+  return load(dataDir).files.filter((f) => f.grantId === grantId && !f.trashed);
+}
+export function grantUsage(grantId: string, dataDir: string = DATA_DIR): number {
+  return grantFiles(grantId, dataDir).reduce((s, f) => s + f.size, 0);
+}
+export function setGrant(fileId: string, grantId: string, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
+  const f = store.files.find((x) => x.id === fileId);
+  if (f) { f.grantId = grantId; save(store, dataDir); }
 }
 export function filesUnder(dir: string, dataDir: string = DATA_DIR): LogicalFile[] {
   const store = load(dataDir);

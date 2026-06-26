@@ -47,6 +47,7 @@ export interface UploadOptions {
   dir?: string; // thu muc dich (vd "/" hoac "/Photos")
   dataDir?: string; // thu muc du lieu user (web). Mac dinh DATA_DIR.
   id?: string; // id file logic (de main biet truoc, phuc vu huy/don dep)
+  grantId?: string; // neu set: file thuoc kho duoc cap cho thanh vien
   resumeId?: string; // id file logic de upload tiep (resume)
   onProgress?: (uploaded: number, total: number) => void;
   signal?: AbortSignal;
@@ -92,6 +93,7 @@ export async function uploadFile(
       blocks,
       complete: false,
       createdAt: new Date().toISOString(),
+      ...(opts.grantId ? { grantId: opts.grantId } : {}),
     };
     upsertFile(logical, dataDir);
   }
