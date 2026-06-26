@@ -14,7 +14,8 @@
     "dev": "tsc && electron .",
     "dist": "npm run build && electron-builder --win",
     "dist:dir": "npm run build && electron-builder --win --dir",
-    "web": "tsx src/web/server.ts"
+    "web": "tsx src/web/server.ts",
+    "webdav": "tsx src/web/webdav.ts"
   },
   "dependencies": {
     "@googleapis/drive": "^8.14.0",
