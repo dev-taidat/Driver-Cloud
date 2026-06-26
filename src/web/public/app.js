@@ -9,6 +9,27 @@ function human(b) { const u = ["B","KB","MB","GB","TB","PB"]; let i=0,n=b; while
 function escapeHtml(s){return String(s).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function show(e){e.classList.remove("hidden");} function hide(e){e.classList.add("hidden");}
 function ext(n){return (n.split(".").pop()||"").toLowerCase();}
+
+// ===== Hop thoai dep (thay prompt/confirm cua trinh duyet) =====
+function dlg({ title, input = false, value = "", okText = "OK", danger = false }) {
+  return new Promise((resolve) => {
+    $("dlgTitle").textContent = title;
+    const inp = $("dlgInput");
+    inp.classList.toggle("hidden", !input);
+    inp.value = value;
+    const ok = $("dlgOk"), cancel = $("dlgCancel");
+    ok.textContent = okText; ok.classList.toggle("danger-btn", danger);
+    show($("dialog"));
+    if (input) setTimeout(() => { inp.focus(); inp.select(); }, 30);
+    const done = (val) => { hide($("dialog")); ok.onclick = cancel.onclick = inp.onkeydown = null; resolve(val); };
+    ok.onclick = () => done(input ? inp.value : true);
+    cancel.onclick = () => done(input ? null : false);
+    inp.onkeydown = (e) => { if (e.key === "Enter") ok.onclick(); if (e.key === "Escape") cancel.onclick(); };
+  });
+}
+const askPrompt = (title, value = "") => dlg({ title, input: true, value, okText: "OK" });
+const askConfirm = (title, danger = true) => dlg({ title, danger, okText: "Đồng ý" });
+$("dialog").addEventListener("click", (e) => { if (e.target === $("dialog")) $("dlgCancel").onclick && $("dlgCancel").onclick(); });
 const IMG=["png","jpg","jpeg","gif","webp","bmp","heic"], VID=["mp4","webm","ogg","ogv","mov","m4v"];
 function iconFor(n){const e=ext(n);
   if(IMG.includes(e))return"🖼️"; if(["mp4","mkv","avi","mov","webm","flv","m4v"].includes(e))return"🎬";
@@ -50,7 +71,7 @@ async function renderTrash() {
   if (files.length) {
     const b = document.createElement("button"); b.className = "btn-primary"; b.style.cssText = "margin-left:16px;font-size:13px;padding:6px 14px";
     b.textContent = "Dọn sạch thùng rác";
-    b.onclick = async () => { if (confirm("Xóa vĩnh viễn TẤT CẢ?")) { await api.post("/api/emptyTrash"); render(); refreshStorage(); } };
+    b.onclick = async () => { if (await askConfirm("Xóa vĩnh viễn TẤT CẢ?")) { await api.post("/api/emptyTrash"); render(); refreshStorage(); } };
     box.appendChild(b);
   }
   $("foldersSection").classList.add("hidden"); $("filesSection").classList.remove("hidden");
@@ -82,8 +103,8 @@ function folderCard(p) {
   const menu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, [
     { icon:"📂", label:"Mở", fn:()=>navTo(p) },
     { icon:"👥", label:"Chia sẻ", fn:()=>openShareModal(p, name) },
-    { icon:"✏️", label:"Đổi tên", fn:async()=>{const n=prompt("Tên mới:",name); if(n&&n!==name){await api.post("/api/folder/rename",{dir:p,newName:n});render();}} },
-    { icon:"🗑️", label:"Xóa (cả nội dung)", danger:true, fn:async()=>{if(confirm(`Xóa thư mục "${name}"?`)){await api.post("/api/removeFolder",{dir:p});render();refreshStorage();}} },
+    { icon:"✏️", label:"Đổi tên", fn:async()=>{const n=await askPrompt("Tên mới:",name); if(n&&n!==name){await api.post("/api/folder/rename",{dir:p,newName:n});render();}} },
+    { icon:"🗑️", label:"Xóa (cả nội dung)", danger:true, fn:async()=>{if(await askConfirm(`Xóa thư mục "${name}"?`)){await api.post("/api/removeFolder",{dir:p});render();refreshStorage();}} },
   ]); };
   el.querySelector(".more").onclick = menu; el.oncontextmenu = menu;
   return el;
@@ -99,7 +120,7 @@ function fileCard(f) {
     { icon:"👁️", label:"Mở / Xem", fn:()=>openPreview(f) },
     { icon:"⬇️", label:"Tải về", fn:()=>downloadFile(f.id) },
     { icon:"📂", label:"Chuyển tới…", fn:()=>openMove(f) },
-    { icon:"✏️", label:"Đổi tên", fn:async()=>{const n=prompt("Tên mới:",f.name); if(n&&n!==f.name){await api.post("/api/rename",{id:f.id,newName:n});render();}} },
+    { icon:"✏️", label:"Đổi tên", fn:async()=>{const n=await askPrompt("Tên mới:",f.name); if(n&&n!==f.name){await api.post("/api/rename",{id:f.id,newName:n});render();}} },
     { icon:"🗑️", label:"Xóa", danger:true, fn:async()=>{await api.post("/api/remove",{id:f.id});toast("Đã chuyển vào thùng rác");render();refreshStorage();} },
   ]); };
   el.querySelector(".more").onclick = menu; el.oncontextmenu = menu;
@@ -110,7 +131,7 @@ function trashCard(f) {
   el.innerHTML = `<span class="ic">${iconFor(f.name)}</span><div class="nm"><div class="t">${escapeHtml(f.name)}</div><div class="s">${human(f.size)}</div></div><span class="more">⋮</span>`;
   const menu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, [
     { icon:"♻️", label:"Khôi phục", fn:async()=>{await api.post("/api/restore",{id:f.id});render();refreshStorage();} },
-    { icon:"🗑️", label:"Xóa vĩnh viễn", danger:true, fn:async()=>{if(confirm(`Xóa vĩnh viễn "${f.name}"?`)){await api.post("/api/deleteForever",{id:f.id});render();refreshStorage();}} },
+    { icon:"🗑️", label:"Xóa vĩnh viễn", danger:true, fn:async()=>{if(await askConfirm(`Xóa vĩnh viễn "${f.name}"?`)){await api.post("/api/deleteForever",{id:f.id});render();refreshStorage();}} },
   ]); };
   el.querySelector(".more").onclick = menu; el.oncontextmenu = menu;
   return el;
@@ -154,7 +175,7 @@ $("newMenu").onclick = async (e) => {
   const act = e.target.dataset.act;
   if (!canWriteHere()) { hide($("newMenu")); return toast("Không thể tạo/tải lên ở mục này."); }
   if (act === "folder") {
-    const n = prompt("Tên thư mục:");
+    const n = await askPrompt("Tên thư mục:");
     if (n) {
       if (view === "shared") await api.post("/api/shared/folder", { shareId: currentShare.shareId, dir: currentShare.dir, name: n });
       else await api.post("/api/folder", { dir: currentDir, name: n });
@@ -237,7 +258,7 @@ async function openAccounts() {
     const pct = a.totalBytes > 0 ? (a.usedBytes/a.totalBytes)*100 : 0;
     const row = document.createElement("div"); row.className = "acc-row";
     row.innerHTML = `<div class="em">${a.email}</div><div class="mini"><div style="width:${pct}%"></div></div><div class="r"><span class="muted small">còn ${human(a.freeBytes)} / ${human(a.totalBytes)}</span><button class="rm">Gỡ</button></div>`;
-    row.querySelector(".rm").onclick = async () => { if (confirm(`Gỡ ${a.email}?`)) { await api.post("/api/accounts/disconnect", { id: a.id }); openAccounts(); refreshStorage(); } };
+    row.querySelector(".rm").onclick = async () => { if (await askConfirm(`Gỡ ${a.email}?`)) { await api.post("/api/accounts/disconnect", { id: a.id }); openAccounts(); refreshStorage(); } };
     list.appendChild(row); });
   $("accTotal").textContent = accs.length ? `${accs.length} tài khoản · tổng còn trống ${human(free)} / ${human(all)}` : "Chưa có tài khoản nào kết nối.";
 
@@ -394,14 +415,14 @@ async function loadFarmMembers() {
         <button class="rm" style="padding:6px 10px">Xóa</button>
       </div>`;
     row.querySelector(".save").onclick = async () => { await api.post("/api/family/grant/quota", { grantId: g.id, quotaGB: Number(row.querySelector(".qedit").value) }); loadFarms(); toast("Đã đổi hạn mức"); };
-    row.querySelector(".rm").onclick = async () => { if (confirm(`Xóa ${g.member} khỏi farm? (thu hồi dung lượng)`)) { await api.post("/api/family/grant/revoke", { grantId: g.id }); loadFarms(); } };
+    row.querySelector(".rm").onclick = async () => { if (await askConfirm(`Xóa ${g.member} khỏi farm? (thu hồi dung lượng)`)) { await api.post("/api/family/grant/revoke", { grantId: g.id }); loadFarms(); } };
     box.appendChild(row);
   });
 }
 $("farmSelect").onchange = () => loadFarmMembers();
-$("farmNew").onclick = async () => { const n = prompt("Tên farm mới:"); if (n) { const r = await api.post("/api/farms", { name: n }); curFarm = r.id; loadFarms(); toast("Đã tạo farm"); } };
-$("farmRename").onclick = async () => { if (!curFarm) return; const n = prompt("Tên farm mới:"); if (n) { await api.post("/api/farms/rename", { id: curFarm, name: n }); loadFarms(); } };
-$("farmDelete").onclick = async () => { if (!curFarm) return; if (confirm("Xóa farm này? (thu hồi dung lượng của mọi thành viên trong farm)")) { await api.post("/api/farms/delete", { id: curFarm }); curFarm = null; loadFarms(); } };
+$("farmNew").onclick = async () => { const n = await askPrompt("Tên farm mới:"); if (n) { const r = await api.post("/api/farms", { name: n }); curFarm = r.id; loadFarms(); toast("Đã tạo farm"); } };
+$("farmRename").onclick = async () => { if (!curFarm) return; const n = await askPrompt("Tên farm mới:"); if (n) { await api.post("/api/farms/rename", { id: curFarm, name: n }); loadFarms(); } };
+$("farmDelete").onclick = async () => { if (!curFarm) return; if (await askConfirm("Xóa farm này? (thu hồi dung lượng của mọi thành viên trong farm)")) { await api.post("/api/farms/delete", { id: curFarm }); curFarm = null; loadFarms(); } };
 
 // Goi y username khi go (cho cac o chia se/cap)
 async function refreshUserOptions(q) {
