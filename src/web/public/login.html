@@ -10,29 +10,41 @@
     <div class="center" style="background:#f6f8fc">
       <div class="setup-card">
         <h1>☁️ Driver Cloud</h1>
-        <h2>Đăng nhập</h2>
-        <p class="muted">Nhập mật khẩu truy cập web.</p>
-        <input id="pw" type="password" placeholder="Mật khẩu" />
-        <button id="go" class="btn-primary" style="width:100%;margin-top:10px">Vào</button>
+        <h2 id="title">Đăng nhập</h2>
+        <p class="muted" id="sub">Đăng nhập để vào kho lưu trữ của bạn.</p>
+        <input id="username" placeholder="Tên đăng nhập" autocomplete="username" />
+        <input id="pw" type="password" placeholder="Mật khẩu" autocomplete="current-password" />
+        <button id="go" class="btn-primary" style="width:100%;margin-top:10px"></button>
         <p id="err" class="err"></p>
+        <p class="muted" style="text-align:center">
+          <span id="switchText"></span> <a href="#" id="switchLink" style="color:#1a73e8"></a>
+        </p>
       </div>
     </div>
     <script>
-      const go = document.getElementById("go");
-      const pw = document.getElementById("pw");
-      const err = document.getElementById("err");
-      async function login() {
-        err.textContent = "";
-        const r = await fetch("/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password: pw.value }),
-        });
-        if (r.ok) location.href = "/";
-        else err.textContent = "Sai mật khẩu.";
+      let mode = "login";
+      const $ = (id) => document.getElementById(id);
+      function applyMode() {
+        const login = mode === "login";
+        $("title").textContent = login ? "Đăng nhập" : "Đăng ký";
+        $("sub").textContent = login ? "Đăng nhập để vào kho lưu trữ của bạn." : "Tạo tài khoản mới cho Driver Cloud.";
+        $("go").textContent = login ? "Đăng nhập" : "Đăng ký";
+        $("switchText").textContent = login ? "Chưa có tài khoản?" : "Đã có tài khoản?";
+        $("switchLink").textContent = login ? "Đăng ký" : "Đăng nhập";
+        $("err").textContent = "";
       }
-      go.onclick = login;
-      pw.addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
+      $("switchLink").onclick = (e) => { e.preventDefault(); mode = mode === "login" ? "register" : "login"; applyMode(); };
+      async function submit() {
+        $("err").textContent = "";
+        const body = JSON.stringify({ username: $("username").value, password: $("pw").value });
+        const r = await fetch("/" + mode, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok) location.href = "/";
+        else $("err").textContent = d.error || "Lỗi.";
+      }
+      $("go").onclick = submit;
+      $("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+      applyMode();
     </script>
   </body>
 </html>

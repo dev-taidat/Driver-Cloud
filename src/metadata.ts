@@ -1,31 +1,28 @@
-import { METADATA_PATH, readJSON, writeJSON } from "./config.js";
+import { DATA_DIR, dataPaths, readJSON, writeJSON } from "./config.js";
 import type { LogicalFile } from "./types.js";
 
 interface MetaStore {
   files: LogicalFile[];
-  folders: string[]; // danh sach duong dan thu muc day du, vd "/Photos", "/Photos/2024"
+  folders: string[]; // duong dan thu muc day du, vd "/Photos", "/Photos/2024"
 }
 
-function load(): MetaStore {
-  const s = readJSON<MetaStore>(METADATA_PATH, { files: [], folders: [] });
+// `dataDir` = thu muc du lieu user (web). Mac dinh DATA_DIR (desktop).
+function load(dataDir: string): MetaStore {
+  const s = readJSON<MetaStore>(dataPaths(dataDir).metadata, { files: [], folders: [] });
   if (!s.folders) s.folders = [];
-  // tuong thich du lieu cu: file thieu `dir` thi suy ra tu path
-  for (const f of s.files) {
-    if (!f.dir) f.dir = parentOf(f.path) || "/";
-  }
+  for (const f of s.files) if (!f.dir) f.dir = parentOf(f.path) || "/";
   return s;
 }
-
-function save(store: MetaStore): void {
-  writeJSON(METADATA_PATH, store);
+function save(store: MetaStore, dataDir: string): void {
+  writeJSON(dataPaths(dataDir).metadata, store);
 }
 
-// ===== Tien ich duong dan =====
+// ===== Tien ich duong dan (pure) =====
 export function parentOf(p: string): string {
   if (p === "/" || !p) return "/";
-  const trimmed = p.replace(/\/+$/, "");
-  const i = trimmed.lastIndexOf("/");
-  return i <= 0 ? "/" : trimmed.slice(0, i);
+  const t = p.replace(/\/+$/, "");
+  const i = t.lastIndexOf("/");
+  return i <= 0 ? "/" : t.slice(0, i);
 }
 export function joinPath(dir: string, name: string): string {
   return dir === "/" ? `/${name}` : `${dir}/${name}`;
@@ -36,118 +33,97 @@ export function baseName(p: string): string {
 }
 
 // ===== File =====
-export function listFiles(): LogicalFile[] {
-  return load().files;
+export function listFiles(dataDir: string = DATA_DIR): LogicalFile[] {
+  return load(dataDir).files;
 }
-
-export function upsertFile(file: LogicalFile): void {
-  const store = load();
+export function upsertFile(file: LogicalFile, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
   const i = store.files.findIndex((f) => f.id === file.id);
   if (i >= 0) store.files[i] = file;
   else store.files.push(file);
-  save(store);
+  save(store, dataDir);
 }
-
-export function findFile(idOrPath: string): LogicalFile | undefined {
-  return load().files.find(
+export function findFile(idOrPath: string, dataDir: string = DATA_DIR): LogicalFile | undefined {
+  return load(dataDir).files.find(
     (f) => f.id === idOrPath || f.path === idOrPath || f.name === idOrPath
   );
 }
-
-export function removeFile(id: string): void {
-  const store = load();
+export function removeFile(id: string, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
   store.files = store.files.filter((f) => f.id !== id);
-  save(store);
+  save(store, dataDir);
 }
 
 // ===== Thung rac =====
-export function trashFile(id: string, when: string): void {
-  const store = load();
+export function trashFile(id: string, when: string, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
   const f = store.files.find((x) => x.id === id);
   if (!f) return;
-  f.trashed = true;
-  f.trashedAt = when;
-  save(store);
+  f.trashed = true; f.trashedAt = when;
+  save(store, dataDir);
 }
-export function restoreFile(id: string): void {
-  const store = load();
+export function restoreFile(id: string, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
   const f = store.files.find((x) => x.id === id);
   if (!f) return;
-  f.trashed = false;
-  delete f.trashedAt;
-  save(store);
+  f.trashed = false; delete f.trashedAt;
+  save(store, dataDir);
 }
-export function listTrash(): LogicalFile[] {
-  return load().files.filter((f) => f.trashed);
+export function listTrash(dataDir: string = DATA_DIR): LogicalFile[] {
+  return load(dataDir).files.filter((f) => f.trashed);
 }
-
-export function setThumb(id: string, dataUri: string): void {
-  const store = load();
+export function setThumb(id: string, dataUri: string, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
   const f = store.files.find((x) => x.id === id);
   if (!f) return;
   f.thumb = dataUri;
-  save(store);
+  save(store, dataDir);
 }
-
-export function renameFile(id: string, newName: string): void {
-  const store = load();
+export function renameFile(id: string, newName: string, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
   const f = store.files.find((x) => x.id === id);
   if (!f) return;
-  f.name = newName;
-  f.path = joinPath(f.dir, newName);
-  save(store);
+  f.name = newName; f.path = joinPath(f.dir, newName);
+  save(store, dataDir);
 }
-
-export function moveFile(id: string, newDir: string): void {
-  const store = load();
+export function moveFile(id: string, newDir: string, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
   const f = store.files.find((x) => x.id === id);
   if (!f) return;
-  f.dir = newDir;
-  f.path = joinPath(newDir, f.name);
-  save(store);
+  f.dir = newDir; f.path = joinPath(newDir, f.name);
+  save(store, dataDir);
 }
 
-// ===== Thu muc =====
-export function listFolders(): string[] {
-  return load().folders;
+// ===== Thu muc ('dir' = duong dan thu muc; 'dataDir' = thu muc du lieu user) =====
+export function listFolders(dataDir: string = DATA_DIR): string[] {
+  return load(dataDir).folders;
 }
-
-export function createFolder(dir: string, name: string): string {
-  const store = load();
+export function createFolder(dir: string, name: string, dataDir: string = DATA_DIR): string {
+  const store = load(dataDir);
   const full = joinPath(dir, name);
-  if (!store.folders.includes(full)) {
-    store.folders.push(full);
-    save(store);
-  }
+  if (!store.folders.includes(full)) { store.folders.push(full); save(store, dataDir); }
   return full;
 }
-
-// Liet ke noi dung 1 thu muc: thu muc con + file truc tiep ben trong
-export function listDir(dir: string): { folders: string[]; files: LogicalFile[] } {
-  const store = load();
+export function listDir(dir: string, dataDir: string = DATA_DIR): { folders: string[]; files: LogicalFile[] } {
+  const store = load(dataDir);
   const folders = store.folders.filter((f) => parentOf(f) === dir).sort();
   const files = store.files.filter((f) => f.dir === dir && !f.trashed);
   return { folders, files };
 }
-
-// Lay tat ca file nam trong thu muc (de quy) - dung khi xoa thu muc
-export function filesUnder(dir: string): LogicalFile[] {
-  const store = load();
+export function filesUnder(dir: string, dataDir: string = DATA_DIR): LogicalFile[] {
+  const store = load(dataDir);
   const prefix = dir === "/" ? "/" : dir + "/";
   return store.files.filter((f) => f.dir === dir || f.path.startsWith(prefix));
 }
-
-// Xoa thu muc + moi thu muc con khoi danh sach (file da duoc xoa rieng o tang tren)
-export function removeFolderEntries(dir: string): void {
-  const store = load();
+export function removeFolderEntries(dir: string, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
   const prefix = dir === "/" ? "/" : dir + "/";
   store.folders = store.folders.filter((f) => f !== dir && !f.startsWith(prefix));
   store.files = store.files.filter((f) => !(f.dir === dir || f.path.startsWith(prefix)));
-  save(store);
+  save(store, dataDir);
 }
-
-export function renameFolder(dir: string, newName: string): void {
-  const store = load();
+export function renameFolder(dir: string, newName: string, dataDir: string = DATA_DIR): void {
+  const store = load(dataDir);
   const parent = parentOf(dir);
   const newPath = joinPath(parent, newName);
   const prefix = dir === "/" ? "/" : dir + "/";
@@ -157,13 +133,8 @@ export function renameFolder(dir: string, newName: string): void {
     return f;
   });
   for (const file of store.files) {
-    if (file.dir === dir) {
-      file.dir = newPath;
-      file.path = joinPath(newPath, file.name);
-    } else if (file.path.startsWith(prefix)) {
-      file.dir = newPath + file.dir.slice(dir.length);
-      file.path = joinPath(file.dir, file.name);
-    }
+    if (file.dir === dir) { file.dir = newPath; file.path = joinPath(newPath, file.name); }
+    else if (file.path.startsWith(prefix)) { file.dir = newPath + file.dir.slice(dir.length); file.path = joinPath(file.dir, file.name); }
   }
-  save(store);
+  save(store, dataDir);
 }

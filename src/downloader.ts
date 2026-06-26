@@ -4,12 +4,12 @@ import { driveFor, loadAccounts } from "./accounts.js";
 import { findFile } from "./metadata.js";
 import { decryptBlock } from "./crypto.js";
 import { runPool } from "./pool.js";
-import { CONCURRENCY } from "./config.js";
+import { CONCURRENCY, DATA_DIR } from "./config.js";
 import type { Account, BlockRef } from "./types.js";
 
 // Tai 1 block (da ma hoa) ve buffer
-async function fetchBlock(acc: Account, block: BlockRef): Promise<Buffer> {
-  const drive = driveFor(acc);
+async function fetchBlock(acc: Account, block: BlockRef, dataDir: string): Promise<Buffer> {
+  const drive = driveFor(acc, dataDir);
   const res = await drive.files.get(
     { fileId: block.driveFileId!, alt: "media" },
     { responseType: "stream" }
@@ -25,6 +25,7 @@ async function fetchBlock(acc: Account, block: BlockRef): Promise<Buffer> {
 }
 
 export interface DownloadOptions {
+  dataDir?: string; // thu muc du lieu user (web). Mac dinh DATA_DIR.
   onProgress?: (downloaded: number, total: number) => void;
   signal?: AbortSignal;
 }
@@ -35,11 +36,12 @@ export async function downloadFile(
   masterKey: Buffer,
   opts: DownloadOptions = {}
 ): Promise<void> {
-  const logical = findFile(idOrPath);
+  const dataDir = opts.dataDir || DATA_DIR;
+  const logical = findFile(idOrPath, dataDir);
   if (!logical) throw new Error(`Khong tim thay file: ${idOrPath}`);
   if (!logical.complete) throw new Error("File chua upload xong, khong the tai.");
 
-  const accById = new Map(loadAccounts().map((a) => [a.id, a]));
+  const accById = new Map(loadAccounts(dataDir).map((a) => [a.id, a]));
   const sorted = [...logical.blocks].sort((a, b) => a.index - b.index);
 
   // Offset byte cua tung block trong file goc
@@ -60,7 +62,7 @@ export async function downloadFile(
       if (opts.signal?.aborted) throw new Error("Da huy.");
       const account = accById.get(block.accountId);
       if (!account) throw new Error(`Thieu account ${block.accountId} cho block ${block.index}`);
-      const encData = await fetchBlock(account, block);
+      const encData = await fetchBlock(account, block, dataDir);
       // Giai ma + kiem tra checksum
       const plain = decryptBlock(masterKey, encData, block.iv, block.authTag, block.sha256);
       fs.writeSync(fd, plain, 0, plain.length, offsets[i]);

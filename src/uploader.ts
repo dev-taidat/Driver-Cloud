@@ -8,7 +8,7 @@ import { upsertFile, findFile, joinPath } from "./metadata.js";
 import { encryptBlock } from "./crypto.js";
 import { runPool } from "./pool.js";
 import { Mutex } from "./mutex.js";
-import { BLOCK_SIZE, CONCURRENCY } from "./config.js";
+import { BLOCK_SIZE, CONCURRENCY, DATA_DIR } from "./config.js";
 import type { Account, BlockRef, LogicalFile } from "./types.js";
 
 // Doc 1 lat [start, start+size) cua file vao buffer
@@ -28,9 +28,10 @@ async function uploadBuffer(
   acc: Account,
   name: string,
   data: Buffer,
-  signal?: AbortSignal
+  signal: AbortSignal | undefined,
+  dataDir: string
 ): Promise<string> {
-  const drive = driveFor(acc);
+  const drive = driveFor(acc, dataDir);
   const res = await drive.files.create(
     {
       requestBody: { name, appProperties: { app: "driver-cloud" } },
@@ -44,6 +45,7 @@ async function uploadBuffer(
 
 export interface UploadOptions {
   dir?: string; // thu muc dich (vd "/" hoac "/Photos")
+  dataDir?: string; // thu muc du lieu user (web). Mac dinh DATA_DIR.
   id?: string; // id file logic (de main biet truoc, phuc vu huy/don dep)
   resumeId?: string; // id file logic de upload tiep (resume)
   onProgress?: (uploaded: number, total: number) => void;
@@ -55,6 +57,7 @@ export async function uploadFile(
   masterKey: Buffer,
   opts: UploadOptions = {}
 ): Promise<LogicalFile> {
+  const dataDir = opts.dataDir || DATA_DIR;
   const stat = fs.statSync(filePath);
   const size = stat.size;
   const name = path.basename(filePath);
@@ -62,11 +65,11 @@ export async function uploadFile(
   let logical: LogicalFile;
 
   if (opts.resumeId) {
-    const existing = findFile(opts.resumeId);
+    const existing = findFile(opts.resumeId, dataDir);
     if (!existing) throw new Error("Khong tim thay file de resume.");
     logical = existing;
   } else {
-    const quotas = await getAllQuotas();
+    const quotas = await getAllQuotas(dataDir);
     if (quotas.length === 0) throw new Error("Chua ket noi account nao.");
     const plan = planBlocks(size, BLOCK_SIZE, quotas);
     const blocks: BlockRef[] = plan.map((p) => ({
@@ -90,10 +93,10 @@ export async function uploadFile(
       complete: false,
       createdAt: new Date().toISOString(),
     };
-    upsertFile(logical);
+    upsertFile(logical, dataDir);
   }
 
-  const accById = new Map(loadAccounts().map((a) => [a.id, a]));
+  const accById = new Map(loadAccounts(dataDir).map((a) => [a.id, a]));
   const lock = new Mutex();
 
   // Tinh start offset cho moi block
@@ -119,7 +122,7 @@ export async function uploadFile(
     const plain = await readSlice(filePath, starts[block.index], block.plainSize);
     const enc = encryptBlock(masterKey, plain);
     const driveName = `${logical.id}.${block.index}.dcblk`;
-    const fileId = await uploadBuffer(account, driveName, enc.data, opts.signal);
+    const fileId = await uploadBuffer(account, driveName, enc.data, opts.signal, dataDir);
 
     // Cap nhat block + luu tien do (co khoa)
     block.driveFileId = fileId;
@@ -128,10 +131,10 @@ export async function uploadFile(
     block.sha256 = enc.sha256;
     uploaded += block.plainSize;
     opts.onProgress?.(uploaded, size);
-    await lock.run(() => upsertFile(logical));
+    await lock.run(() => upsertFile(logical, dataDir));
   });
 
   logical.complete = logical.blocks.every((b) => !!b.driveFileId);
-  upsertFile(logical);
+  upsertFile(logical, dataDir);
   return logical;
 }

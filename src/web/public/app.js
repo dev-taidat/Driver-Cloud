@@ -203,24 +203,54 @@ async function refreshStorage() {
   $("storageText").textContent = `${human(used)} / ${human(all)} đã dùng`;
   return accs;
 }
-$("openAccounts").onclick = async () => {
+let oauthStatus = { hasClient: false, redirectUri: "" };
+async function openAccounts() {
   const accs = await refreshStorage();
   const list = $("accList"); list.innerHTML = ""; let free = 0, all = 0;
   accs.forEach((a) => { free += a.freeBytes; all += a.totalBytes;
     const pct = a.totalBytes > 0 ? (a.usedBytes/a.totalBytes)*100 : 0;
     const row = document.createElement("div"); row.className = "acc-row";
     row.innerHTML = `<div class="em">${a.email}</div><div class="mini"><div style="width:${pct}%"></div></div><div class="r"><span class="muted small">còn ${human(a.freeBytes)} / ${human(a.totalBytes)}</span><button class="rm">Gỡ</button></div>`;
-    row.querySelector(".rm").onclick = async () => { if (confirm(`Gỡ ${a.email}?`)) { await api.post("/api/accounts/disconnect", { id: a.id }); $("openAccounts").onclick(); refreshStorage(); } };
+    row.querySelector(".rm").onclick = async () => { if (confirm(`Gỡ ${a.email}?`)) { await api.post("/api/accounts/disconnect", { id: a.id }); openAccounts(); refreshStorage(); } };
     list.appendChild(row); });
-  $("accTotal").textContent = accs.length ? `${accs.length} tài khoản · tổng còn trống ${human(free)} / ${human(all)}` : "Chưa có tài khoản.";
+  $("accTotal").textContent = accs.length ? `${accs.length} tài khoản · tổng còn trống ${human(free)} / ${human(all)}` : "Chưa có tài khoản nào kết nối.";
+
+  oauthStatus = await api.get("/api/oauth/status");
+  $("oauthSetup").classList.toggle("hidden", oauthStatus.hasClient);
+  $("addAccount").classList.toggle("hidden", !oauthStatus.hasClient);
+  $("guide").innerHTML = guideHtml(oauthStatus.redirectUri);
   show($("accModal"));
-};
+}
+$("openAccounts").onclick = openAccounts;
 $("accClose").onclick = () => hide($("accModal"));
 $("accModal").onclick = (e) => { if (e.target === $("accModal")) hide($("accModal")); };
 $("addAccount").onclick = () => { location.href = "/oauth/start"; };
+$("guideToggle").onclick = (e) => { e.preventDefault(); $("guide").classList.toggle("hidden"); };
+$("saveClient").onclick = async () => {
+  const clientId = $("cid").value.trim(), clientSecret = $("csec").value.trim();
+  if (!clientId || !clientSecret) return toast("Nhập đủ Client ID và Secret");
+  await api.post("/api/oauth/client", { clientId, clientSecret });
+  openAccounts();
+  toast("Đã lưu OAuth. Giờ bấm '+ Thêm tài khoản Google Drive'.");
+};
+
+function guideHtml(redirect) {
+  return `<ol class="guide-list">
+    <li>Vào <b>console.cloud.google.com</b> → tạo project (miễn phí, không cần thẻ).</li>
+    <li>APIs &amp; Services → <b>Library</b> → bật <b>Google Drive API</b>.</li>
+    <li>OAuth consent screen → <b>External</b> → điền tên + email → <b>Publish app</b> (để token vĩnh viễn).</li>
+    <li>Credentials → Create credentials → <b>OAuth client ID</b> → loại <b>Web application</b>.</li>
+    <li>Mục <b>Authorized redirect URIs</b> → thêm đúng dòng này:<br>
+      <code class="redirect">${redirect}</code></li>
+    <li>Tạo xong → copy <b>Client ID</b> &amp; <b>Client Secret</b> dán vào ô dưới.</li>
+  </ol>`;
+}
+
+$("logoutBtn").onclick = async () => { await fetch("/logout", { method: "POST" }); location.reload(); };
+async function loadMe() { try { const m = await api.get("/api/me"); $("meName").textContent = m.username ? "👤 " + m.username : ""; } catch {} }
 $("navMyDrive").onclick = () => { view = "drive"; searchQuery = ""; $("search").value = ""; hide($("searchClear")); setNav(); render(); };
 $("navTrash").onclick = () => { view = "trash"; setNav(); render(); };
 
 function toast(msg) { const el = document.createElement("div"); el.className = "toast ok"; el.textContent = msg; $("toasts").appendChild(el); setTimeout(() => el.remove(), 4000); }
 
-render(); refreshStorage();
+render(); refreshStorage(); loadMe();

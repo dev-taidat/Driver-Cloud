@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { KEYFILE_PATH, readJSON, writeJSON } from "./config.js";
+import { DATA_DIR, dataPaths, readJSON, writeJSON } from "./config.js";
 
 // ===== Quan ly master key =====
 // Master key (32 byte) duoc sinh ngau nhien 1 lan, roi BOC LAI (wrap) bang khoa
@@ -26,22 +26,23 @@ function deriveKEK(password: string, salt: Buffer): Buffer {
   });
 }
 
-export function keyfileExists(): boolean {
-  return fs.existsSync(KEYFILE_PATH);
+export function keyfileExists(dir: string = DATA_DIR): boolean {
+  return fs.existsSync(dataPaths(dir).keyfile);
 }
 
 // Che do KHONG mat khau: tu tao (hoac doc lai) master key luu thang ra dia.
 // Dung de bo qua buoc nhap mat khau. File van duoc ma hoa bang key nay.
-export function ensureKeyNoPassword(): Buffer {
-  const existing = readJSON<any>(KEYFILE_PATH, null);
+export function ensureKeyNoPassword(dir: string = DATA_DIR): Buffer {
+  const kp = dataPaths(dir).keyfile;
+  const existing = readJSON<any>(kp, null);
   if (existing && existing.raw) return Buffer.from(existing.raw, "base64");
   const masterKey = crypto.randomBytes(32);
-  writeJSON(KEYFILE_PATH, { raw: masterKey.toString("base64") });
+  writeJSON(kp, { raw: masterKey.toString("base64") });
   return masterKey;
 }
 
 // Tao master key moi, boc bang mat khau, luu ra dia.
-export function initMasterKey(password: string): Buffer {
+export function initMasterKey(password: string, dir: string = DATA_DIR): Buffer {
   const masterKey = crypto.randomBytes(32);
   const salt = crypto.randomBytes(16);
   const kek = deriveKEK(password, salt);
@@ -55,13 +56,13 @@ export function initMasterKey(password: string): Buffer {
     authTag: authTag.toString("base64"),
     wrapped: wrapped.toString("base64"),
   };
-  writeJSON(KEYFILE_PATH, kf);
+  writeJSON(dataPaths(dir).keyfile, kf);
   return masterKey;
 }
 
 // Mo khoa master key bang mat khau. Sai mat khau -> nem loi.
-export function unlockMasterKey(password: string): Buffer {
-  const kf = readJSON<KeyFile | null>(KEYFILE_PATH, null);
+export function unlockMasterKey(password: string, dir: string = DATA_DIR): Buffer {
+  const kf = readJSON<KeyFile | null>(dataPaths(dir).keyfile, null);
   if (!kf) throw new Error("Chua khoi tao khoa. Hay dat mat khau truoc.");
   const salt = Buffer.from(kf.salt, "base64");
   const kek = deriveKEK(password, salt);

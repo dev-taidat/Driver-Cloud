@@ -33,6 +33,18 @@ export const CONCURRENCY = 4;
 // Duong dan file luu master key (da ma hoa bang mat khau nguoi dung)
 export const KEYFILE_PATH = path.join(DATA_DIR, "keyfile.json");
 
+// Tra ve duong dan cac file du lieu trong MOT thu muc bat ky (per-user cho ban web).
+// Mac dinh la DATA_DIR (~/.driver-cloud) cho ban desktop.
+export function dataPaths(dir: string = DATA_DIR) {
+  return {
+    dir,
+    accounts: path.join(dir, "accounts.json"),
+    metadata: path.join(dir, "metadata.json"),
+    keyfile: path.join(dir, "keyfile.json"),
+    oauthClient: path.join(dir, "oauth_client.json"),
+  };
+}
+
 export function ensureDataDir(): void {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -46,6 +58,8 @@ export function readJSON<T>(file: string, fallback: T): T {
 }
 
 export function writeJSON(file: string, data: unknown): void {
-  ensureDataDir();
+  // Tao thu muc cha cua file neu chua co (ho tro thu muc per-user)
+  const dir = path.dirname(file);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }

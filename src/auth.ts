@@ -2,10 +2,11 @@ import http from "node:http";
 import { OAuth2Client } from "google-auth-library";
 import open from "open";
 import {
-  OAUTH_CLIENT_PATH,
+  DATA_DIR,
   OAUTH_PORT,
   OAUTH_REDIRECT,
   SCOPES,
+  dataPaths,
   readJSON,
 } from "./config.js";
 
@@ -14,31 +15,29 @@ interface OAuthClient {
   client_secret: string;
 }
 
-// Doc OAuth client (client_id/secret) tu file do nguoi dung tao trong Google Cloud Console.
-export function loadOAuthClient(): OAuthClient {
-  const raw = readJSON<any>(OAUTH_CLIENT_PATH, null);
+// Doc OAuth client (client_id/secret). `dir` = thu muc user (web), mac dinh DATA_DIR.
+export function loadOAuthClient(dir: string = DATA_DIR): OAuthClient {
+  const raw = readJSON<any>(dataPaths(dir).oauthClient, null);
   if (!raw) {
-    throw new Error(
-      `Chua co OAuth client. Hay nhap Client ID/Secret trong app, hoac tao file ${OAUTH_CLIENT_PATH}`
-    );
+    throw new Error(`Chua co OAuth client. Hay nhap Client ID/Secret trong app.`);
   }
   const c = raw.installed || raw.web || raw;
   return { client_id: c.client_id, client_secret: c.client_secret };
 }
 
-export function makeOAuth2Client(): OAuth2Client {
-  const { client_id, client_secret } = loadOAuthClient();
+export function makeOAuth2Client(dir: string = DATA_DIR): OAuth2Client {
+  const { client_id, client_secret } = loadOAuthClient(dir);
   return new OAuth2Client(client_id, client_secret, OAUTH_REDIRECT);
 }
 
 // ===== Dung cho ban WEB (redirect URI tuy y, vd https://domain/oauth/callback) =====
-export function oauthClientWithRedirect(redirectUri: string): OAuth2Client {
-  const { client_id, client_secret } = loadOAuthClient();
+export function oauthClientWithRedirect(redirectUri: string, dir: string = DATA_DIR): OAuth2Client {
+  const { client_id, client_secret } = loadOAuthClient(dir);
   return new OAuth2Client(client_id, client_secret, redirectUri);
 }
 
-export function getAuthUrl(redirectUri: string): string {
-  return oauthClientWithRedirect(redirectUri).generateAuthUrl({
+export function getAuthUrl(redirectUri: string, dir: string = DATA_DIR): string {
+  return oauthClientWithRedirect(redirectUri, dir).generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: SCOPES,
@@ -48,9 +47,10 @@ export function getAuthUrl(redirectUri: string): string {
 // Doi code lay tai khoan (email + refreshToken) - dung o route callback cua web
 export async function exchangeCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  dir: string = DATA_DIR
 ): Promise<{ email: string; refreshToken: string }> {
-  const oauth2 = oauthClientWithRedirect(redirectUri);
+  const oauth2 = oauthClientWithRedirect(redirectUri, dir);
   const { tokens } = await oauth2.getToken(code);
   if (!tokens.refresh_token) throw new Error("Khong nhan duoc refresh_token. Hay thu lai.");
   let email = "unknown";
