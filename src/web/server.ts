@@ -15,9 +15,10 @@ import { downloadFile } from "../downloader.js";
 import { writeJSON, dataPaths } from "../config.js";
 import {
   listDir, findFile, createFolder, renameFolder, filesUnder, removeFolderEntries,
-  renameFile, moveFile, trashFile, restoreFile, listTrash, setThumb, removeFile,
+  renameFile, moveFile, trashFile, restoreFile, listTrash, setThumb, removeFile, baseName,
 } from "../metadata.js";
-import { register, verify, findById, userDir, DATA_ROOT } from "./users.js";
+import { register, verify, findById, findByUsername, userDir, DATA_ROOT } from "./users.js";
+import { createShare, listMine, listForUser, getById, revoke, pathInShare } from "./shares.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -208,6 +209,128 @@ app.get("/api/preview/:id", async (req, res) => {
     if (IMG_EXT.includes(ext) || VID_EXT.includes(ext)) res.sendFile(out);
     else res.download(out, file.name);
   } catch (e: any) { res.status(404).send(e.message); }
+});
+
+// ===================== CHIA SE (Family & Share) =====================
+import { listFolders } from "../metadata.js";
+
+// Tao chia se 1 thu muc cho user khac qua username
+app.post("/api/share", (req, res) => {
+  try {
+    const me = findById(currentUserId(req)!)!;
+    const dir = reqDir(req);
+    const folderPath = String(req.body.path || "/");
+    const permission = req.body.permission === "edit" ? "edit" : "view";
+    const target = findByUsername(String(req.body.toUsername || "").trim());
+    if (!target) throw new Error("Không tìm thấy người dùng này.");
+    if (target.id === me.id) throw new Error("Không thể chia sẻ cho chính mình.");
+    if (folderPath !== "/" && !listFolders(dir).includes(folderPath)) throw new Error("Thư mục không tồn tại.");
+    const s = createShare({
+      ownerId: me.id, ownerUsername: me.username,
+      targetId: target.id, targetUsername: target.username,
+      type: "folder", path: folderPath, permission,
+    });
+    res.json({ ok: true, id: s.id });
+  } catch (e: any) { res.status(400).json({ error: e.message }); }
+});
+
+app.get("/api/shares/mine", (req, res) => {
+  const me = currentUserId(req)!;
+  res.json(listMine(me).map((s) => ({
+    id: s.id, to: s.targetUsername, path: s.path,
+    name: s.path === "/" ? "Toàn bộ kho" : baseName(s.path), permission: s.permission,
+  })));
+});
+app.post("/api/share/revoke", (req, res) => { revoke(req.body.id, currentUserId(req)!); res.json({ ok: true }); });
+
+app.get("/api/shared-with-me", (req, res) => {
+  const me = currentUserId(req)!;
+  res.json(listForUser(me).map((s) => ({
+    shareId: s.id, owner: s.ownerUsername, path: s.path,
+    name: s.path === "/" ? `Kho của ${s.ownerUsername}` : baseName(s.path), permission: s.permission,
+  })));
+});
+
+// Resolve share cho user hien tai (nem loi neu khong co quyen)
+function resolveShare(req: express.Request, shareId: string, needEdit = false) {
+  const s = getById(shareId);
+  if (!s || s.targetId !== currentUserId(req)) throw new Error("Không có quyền truy cập.");
+  if (needEdit && s.permission !== "edit") throw new Error("Bạn chỉ có quyền xem.");
+  return { share: s, ownerDir: userDir(s.ownerId) };
+}
+
+// Duyet trong thu muc duoc chia se
+app.get("/api/shared/list", (req, res) => {
+  try {
+    const { share, ownerDir } = resolveShare(req, String(req.query.shareId));
+    const dir = String(req.query.dir || share.path);
+    if (!pathInShare(share, dir)) throw new Error("Ngoài phạm vi chia sẻ.");
+    const em = emailMap(ownerDir);
+    const r = listDir(dir, ownerDir);
+    res.json({ permission: share.permission, base: share.path, folders: r.folders, files: r.files.map((f) => mapFile(f, em)) });
+  } catch (e: any) { res.status(403).json({ error: e.message }); }
+});
+
+async function sharedFile(req: express.Request, shareId: string, id: string, needEdit = false) {
+  const { share, ownerDir } = resolveShare(req, shareId, needEdit);
+  const f = findFile(id, ownerDir);
+  if (!f || !pathInShare(share, f.path)) throw new Error("Ngoài phạm vi chia sẻ.");
+  return { share, ownerDir, f };
+}
+app.get("/api/shared/download/:shareId/:id", async (req, res) => {
+  try {
+    const { ownerDir, f } = await sharedFile(req, req.params.shareId, req.params.id);
+    const out = path.join(TMP, "shared_" + req.params.id + "_" + f.name);
+    if (!fs.existsSync(out) || fs.statSync(out).size !== f.size) await downloadFile(f.id, out, ensureKeyNoPassword(ownerDir), { dataDir: ownerDir });
+    res.download(out, f.name);
+  } catch (e: any) { res.status(403).send(e.message); }
+});
+app.get("/api/shared/preview/:shareId/:id", async (req, res) => {
+  try {
+    const { ownerDir, f } = await sharedFile(req, req.params.shareId, req.params.id);
+    const out = path.join(TMP, "shared_" + req.params.id + "_" + f.name);
+    if (!fs.existsSync(out) || fs.statSync(out).size !== f.size) await downloadFile(f.id, out, ensureKeyNoPassword(ownerDir), { dataDir: ownerDir });
+    const ext = (f.name.split(".").pop() || "").toLowerCase();
+    if (IMG_EXT.includes(ext) || VID_EXT.includes(ext)) res.sendFile(out); else res.download(out, f.name);
+  } catch (e: any) { res.status(403).send(e.message); }
+});
+
+// Quyen EDIT: tao thu muc / xoa / upload trong thu muc duoc chia se
+app.post("/api/shared/folder", (req, res) => {
+  try {
+    const { share, ownerDir } = resolveShare(req, req.body.shareId, true);
+    const dir = String(req.body.dir || share.path);
+    if (!pathInShare(share, dir)) throw new Error("Ngoài phạm vi.");
+    res.json({ path: createFolder(dir, req.body.name, ownerDir) });
+  } catch (e: any) { res.status(403).json({ error: e.message }); }
+});
+app.post("/api/shared/remove", async (req, res) => {
+  try {
+    const { ownerDir, f } = await sharedFile(req, req.body.shareId, req.body.id, true);
+    await setChunksTrashed(f, true, ownerDir); trashFile(f.id, new Date().toISOString(), ownerDir);
+    res.json({ ok: true });
+  } catch (e: any) { res.status(403).json({ error: e.message }); }
+});
+app.post("/api/shared/upload", (req, res) => {
+  let share: any, ownerDir: string;
+  try { ({ share, ownerDir } = resolveShare(req, String(req.query.shareId), true)); }
+  catch (e: any) { return res.status(403).json({ error: e.message }); }
+  const targetDir = String(req.query.dir || share.path);
+  if (!pathInShare(share, targetDir)) return res.status(403).json({ error: "Ngoài phạm vi." });
+  const key = ensureKeyNoPassword(ownerDir);
+  const bb = busboy({ headers: req.headers });
+  let finished = false;
+  bb.on("file", (_n, stream, info) => {
+    const tmpPath = path.join(TMP, crypto.randomUUID() + "_" + info.filename);
+    const ws = fs.createWriteStream(tmpPath); stream.pipe(ws);
+    ws.on("close", async () => {
+      if (finished) return; finished = true;
+      try { const lg = await uploadFile(tmpPath, key, { dir: targetDir, dataDir: ownerDir }); fs.unlink(tmpPath, () => {}); res.json({ ok: true, id: lg.id }); }
+      catch (e: any) { fs.unlink(tmpPath, () => {}); res.status(500).json({ error: e.message }); }
+    });
+  });
+  bb.on("error", (e: any) => res.status(500).json({ error: e.message }));
+  req.pipe(bb);
 });
 
 app.use(express.static(PUBLIC_DIR));

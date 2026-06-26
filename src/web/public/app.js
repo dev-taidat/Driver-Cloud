@@ -19,6 +19,8 @@ function iconFor(n){const e=ext(n);
 // ===== Render =====
 async function render() {
   if (view === "trash") return renderTrash();
+  if (view === "sharedList") return renderSharedList();
+  if (view === "shared") return renderShared();
   if (searchQuery) return renderSearch();
   const { folders, files } = await api.get(`/api/list?dir=${encodeURIComponent(currentDir)}`);
   renderCrumbs();
@@ -63,7 +65,11 @@ function renderCrumbs() {
     const c = document.createElement("span"); c.className = "crumb" + (i === parts.length-1 ? " last" : ""); c.textContent = p; const t = acc; if (i !== parts.length-1) c.onclick = () => navTo(t); box.appendChild(c); });
 }
 function navTo(d){ view="drive"; setNav(); currentDir=d; render(); }
-function setNav(){ $("navMyDrive").classList.toggle("active",view==="drive"); $("navTrash").classList.toggle("active",view==="trash"); }
+function setNav(){
+  $("navMyDrive").classList.toggle("active", view==="drive");
+  $("navShared").classList.toggle("active", view==="sharedList" || view==="shared");
+  $("navTrash").classList.toggle("active", view==="trash");
+}
 
 function folderCard(p) {
   const name = p.slice(p.lastIndexOf("/") + 1);
@@ -72,6 +78,7 @@ function folderCard(p) {
   el.ondblclick = () => navTo(p);
   const menu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, [
     { icon:"📂", label:"Mở", fn:()=>navTo(p) },
+    { icon:"👥", label:"Chia sẻ", fn:()=>openShareModal(p, name) },
     { icon:"✏️", label:"Đổi tên", fn:async()=>{const n=prompt("Tên mới:",name); if(n&&n!==name){await api.post("/api/folder/rename",{dir:p,newName:n});render();}} },
     { icon:"🗑️", label:"Xóa (cả nội dung)", danger:true, fn:async()=>{if(confirm(`Xóa thư mục "${name}"?`)){await api.post("/api/removeFolder",{dir:p});render();refreshStorage();}} },
   ]); };
@@ -114,32 +121,46 @@ function showCtx(e, items) {
 document.addEventListener("click", (e) => { if (!$("ctxMenu").contains(e.target)) hide($("ctxMenu")); hide($("newMenu")); });
 
 // ===== Preview =====
-let viewerFile = null;
-function openPreview(f) {
+let viewerDl = null;
+function openPreview(f, previewUrl, downloadUrl) {
   const e = ext(f.name);
-  if (!IMG.includes(e) && !VID.includes(e)) return downloadFile(f.id); // loai khac -> tai ve
-  viewerFile = f; $("viewerTitle").textContent = f.name;
-  const src = `/api/preview/${f.id}`;
+  const dl = downloadUrl || `/api/download/${f.id}`;
+  if (!IMG.includes(e) && !VID.includes(e)) { window.location = dl; return; } // loai khac -> tai ve
+  viewerDl = dl; $("viewerTitle").textContent = f.name;
+  const src = previewUrl || `/api/preview/${f.id}`;
   $("viewerBody").innerHTML = IMG.includes(e) ? `<img src="${src}">` : `<video src="${src}" controls autoplay></video>`;
   show($("viewer"));
 }
-function closeViewer(){ hide($("viewer")); $("viewerBody").innerHTML=""; viewerFile=null; }
+function closeViewer(){ hide($("viewer")); $("viewerBody").innerHTML=""; viewerDl=null; }
 $("viewerClose").onclick = closeViewer;
 $("viewer").onclick = (e) => { if (e.target === $("viewer")) closeViewer(); };
-$("viewerDownload").onclick = () => viewerFile && downloadFile(viewerFile.id);
+$("viewerDownload").onclick = () => viewerDl && (window.location = viewerDl);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("viewer").classList.contains("hidden")) closeViewer(); });
 function downloadFile(id){ window.location = `/api/download/${id}`; }
 
 // ===== New / Upload =====
 $("newBtn").onclick = (e) => { e.stopPropagation(); $("newMenu").classList.toggle("hidden"); };
+function canWriteHere() { return view === "drive" || (view === "shared" && currentShare && currentShare.permission === "edit"); }
+function uploadEndpoint() {
+  if (view === "shared") return `/api/shared/upload?shareId=${encodeURIComponent(currentShare.shareId)}&dir=${encodeURIComponent(currentShare.dir)}`;
+  return `/api/upload?dir=${encodeURIComponent(currentDir)}`;
+}
 $("newMenu").onclick = async (e) => {
   const act = e.target.dataset.act;
-  if (act === "folder") { const n = prompt("Tên thư mục:"); if (n) { await api.post("/api/folder", { dir: currentDir, name: n }); render(); } }
-  else if (act === "upload") $("fileInput").click();
+  if (!canWriteHere()) { hide($("newMenu")); return toast("Không thể tạo/tải lên ở mục này."); }
+  if (act === "folder") {
+    const n = prompt("Tên thư mục:");
+    if (n) {
+      if (view === "shared") await api.post("/api/shared/folder", { shareId: currentShare.shareId, dir: currentShare.dir, name: n });
+      else await api.post("/api/folder", { dir: currentDir, name: n });
+      render();
+    }
+  } else if (act === "upload") $("fileInput").click();
 };
 $("fileInput").onchange = (e) => { uploadFiles([...e.target.files]); e.target.value = ""; };
 
 async function uploadFiles(files) {
+  if (!canWriteHere()) return toast("Không thể tải lên ở mục này.");
   for (const file of files) await uploadOne(file);
   render(); refreshStorage();
 }
@@ -148,7 +169,7 @@ function uploadOne(file) {
     show($("progressPanel")); $("ppTitle").textContent = "Đang tải lên";
     const xhr = new XMLHttpRequest();
     const row = progRow("upload:" + file.name + Math.random(), file.name, () => xhr.abort());
-    xhr.open("POST", `/api/upload?dir=${encodeURIComponent(currentDir)}`);
+    xhr.open("POST", uploadEndpoint());
     xhr.upload.onprogress = (e) => setProg(row, e.loaded, e.total);
     xhr.onload = () => { setProg(row, 1, 1, true); resolve(); };
     xhr.onabort = () => { const c = row.querySelector(".cancel"); if (c) c.remove(); row.querySelector(".pct").textContent = "Đã hủy"; resolve(); };
@@ -250,6 +271,105 @@ $("logoutBtn").onclick = async () => { await fetch("/logout", { method: "POST" }
 async function loadMe() { try { const m = await api.get("/api/me"); $("meName").textContent = m.username ? "👤 " + m.username : ""; } catch {} }
 $("navMyDrive").onclick = () => { view = "drive"; searchQuery = ""; $("search").value = ""; hide($("searchClear")); setNav(); render(); };
 $("navTrash").onclick = () => { view = "trash"; setNav(); render(); };
+$("navShared").onclick = () => { view = "sharedList"; setNav(); render(); };
+
+// ===== Chia se: modal tao chia se =====
+let shareTargetPath = "/";
+function openShareModal(p, name) {
+  shareTargetPath = p;
+  $("shareTarget").textContent = `Thư mục: ${name} (${p})`;
+  $("shareUser").value = ""; $("shareErr").textContent = "";
+  loadShareList();
+  show($("shareModal"));
+}
+async function loadShareList() {
+  const mine = await api.get("/api/shares/mine");
+  const here = mine.filter((s) => s.path === shareTargetPath);
+  const box = $("shareList"); box.innerHTML = here.length ? "" : '<div class="muted small">Chưa chia sẻ với ai.</div>';
+  here.forEach((s) => {
+    const row = document.createElement("div"); row.className = "acc-row";
+    row.innerHTML = `<div class="r"><span><b>${escapeHtml(s.to)}</b> · ${s.permission === "edit" ? "sửa" : "xem"}</span><button class="rm">Thu hồi</button></div>`;
+    row.querySelector(".rm").onclick = async () => { await api.post("/api/share/revoke", { id: s.id }); loadShareList(); };
+    box.appendChild(row);
+  });
+}
+$("shareClose").onclick = () => hide($("shareModal"));
+$("shareModal").onclick = (e) => { if (e.target === $("shareModal")) hide($("shareModal")); };
+$("shareBtn").onclick = async () => {
+  $("shareErr").textContent = "";
+  const r = await api.post("/api/share", { path: shareTargetPath, toUsername: $("shareUser").value, permission: $("sharePerm").value });
+  if (r.error) return ($("shareErr").textContent = r.error);
+  $("shareUser").value = ""; loadShareList();
+  toast("Đã chia sẻ");
+};
+
+// ===== Chia se: duyet =====
+let currentShare = null;
+async function renderSharedList() {
+  const shares = await api.get("/api/shared-with-me");
+  $("crumbs").innerHTML = '<span class="crumb last">Được chia sẻ với tôi</span>';
+  $("foldersSection").classList.remove("hidden"); $("filesSection").classList.add("hidden");
+  $("emptyHint").classList.toggle("hidden", shares.length > 0);
+  if (!shares.length) $("emptyHint").querySelector("p").innerHTML = "Chưa có ai chia sẻ gì cho bạn.";
+  const box = $("folders"); box.innerHTML = "";
+  shares.forEach((s) => {
+    const el = document.createElement("div"); el.className = "card";
+    el.innerHTML = `<span class="ic">👥</span><div class="nm"><div class="t">${escapeHtml(s.name)}</div><div class="s">từ ${escapeHtml(s.owner)} · ${s.permission === "edit" ? "có thể sửa" : "chỉ xem"}</div></div>`;
+    el.onclick = () => { view = "shared"; currentShare = { shareId: s.shareId, base: s.path, dir: s.path, permission: s.permission, owner: s.owner }; setNav(); render(); };
+    box.appendChild(el);
+  });
+}
+async function renderShared() {
+  const r = await api.get(`/api/shared/list?shareId=${encodeURIComponent(currentShare.shareId)}&dir=${encodeURIComponent(currentShare.dir)}`);
+  if (r.error) { toast(r.error); view = "sharedList"; setNav(); return render(); }
+  currentShare.permission = r.permission;
+  renderSharedCrumbs();
+  $("folders").innerHTML = ""; $("files").innerHTML = "";
+  $("foldersSection").classList.toggle("hidden", r.folders.length === 0);
+  $("filesSection").classList.toggle("hidden", r.files.length === 0);
+  $("emptyHint").classList.toggle("hidden", r.folders.length + r.files.length > 0);
+  if (!r.folders.length && !r.files.length) $("emptyHint").querySelector("p").innerHTML = currentShare.permission === "edit" ? "Trống. Kéo-thả tệp để tải lên." : "Thư mục này trống.";
+  r.folders.forEach((p) => $("folders").appendChild(sharedFolderCard(p)));
+  r.files.forEach((f) => $("files").appendChild(sharedFileCard(f)));
+}
+function renderSharedCrumbs() {
+  const box = $("crumbs"); box.innerHTML = "";
+  const back = document.createElement("span"); back.className = "crumb"; back.textContent = "Được chia sẻ với tôi"; back.onclick = () => { view = "sharedList"; setNav(); render(); }; box.appendChild(back);
+  const base = currentShare.base;
+  const bname = base === "/" ? `Kho của ${currentShare.owner}` : base.slice(base.lastIndexOf("/") + 1);
+  const sep = () => { const s = document.createElement("span"); s.className = "crumb-sep"; s.textContent = "›"; box.appendChild(s); };
+  sep();
+  const root = document.createElement("span"); root.className = "crumb" + (currentShare.dir === base ? " last" : ""); root.textContent = bname; root.onclick = () => { currentShare.dir = base; render(); }; box.appendChild(root);
+  if (currentShare.dir !== base) {
+    const rest = currentShare.dir.slice(base === "/" ? 1 : base.length).split("/").filter(Boolean);
+    let acc = base === "/" ? "" : base;
+    rest.forEach((p, i) => { acc += "/" + p; sep(); const c = document.createElement("span"); c.className = "crumb" + (i === rest.length - 1 ? " last" : ""); c.textContent = p; const t = acc; if (i !== rest.length - 1) c.onclick = () => { currentShare.dir = t; render(); }; box.appendChild(c); });
+  }
+}
+function sharedFolderCard(p) {
+  const name = p.slice(p.lastIndexOf("/") + 1);
+  const el = document.createElement("div"); el.className = "card";
+  el.innerHTML = `<span class="ic">📁</span><div class="nm"><div class="t">${escapeHtml(name)}</div></div>`;
+  el.ondblclick = () => { currentShare.dir = p; render(); };
+  el.onclick = () => { currentShare.dir = p; render(); };
+  return el;
+}
+function sharedFileCard(f) {
+  const sid = currentShare.shareId;
+  const previewUrl = `/api/shared/preview/${sid}/${f.id}`, dlUrl = `/api/shared/download/${sid}/${f.id}`;
+  const el = document.createElement("div"); el.className = "card";
+  const ic = f.thumb ? `<img class="thumb" src="${f.thumb}">` : `<span class="ic">${iconFor(f.name)}</span>`;
+  el.innerHTML = `${ic}<div class="nm"><div class="t">${escapeHtml(f.name)}</div><div class="s">${human(f.size)}</div></div><span class="more">⋮</span>`;
+  el.ondblclick = () => openPreview(f, previewUrl, dlUrl);
+  const items = [
+    { icon: "👁️", label: "Mở / Xem", fn: () => openPreview(f, previewUrl, dlUrl) },
+    { icon: "⬇️", label: "Tải về", fn: () => (window.location = dlUrl) },
+  ];
+  if (currentShare.permission === "edit") items.push({ icon: "🗑️", label: "Xóa", danger: true, fn: async () => { await api.post("/api/shared/remove", { shareId: sid, id: f.id }); render(); } });
+  const menu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, items); };
+  el.querySelector(".more").onclick = menu; el.oncontextmenu = menu;
+  return el;
+}
 
 function toast(msg) { const el = document.createElement("div"); el.className = "toast ok"; el.textContent = msg; $("toasts").appendChild(el); setTimeout(() => el.remove(), 4000); }
 
