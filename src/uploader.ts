@@ -6,7 +6,7 @@ import { driveFor, getAllQuotas, loadAccounts } from "./accounts.js";
 import { planBlocks, human } from "./allocator.js";
 import { upsertFile, findFile, joinPath } from "./metadata.js";
 import { encryptBlock } from "./crypto.js";
-import { runPool } from "./pool.js";
+import { runPool, withRetry } from "./pool.js";
 import { Mutex } from "./mutex.js";
 import { BLOCK_SIZE, CONCURRENCY, DATA_DIR } from "./config.js";
 import type { Account, BlockRef, LogicalFile } from "./types.js";
@@ -32,12 +32,17 @@ async function uploadBuffer(
   dataDir: string
 ): Promise<string> {
   const drive = driveFor(acc, dataDir);
-  const res = await drive.files.create(
-    {
-      requestBody: { name, appProperties: { app: "driver-cloud" } },
-      media: { body: Readable.from(data) },
-      fields: "id",
-    },
+  // Tao lai stream moi lan thu lai (stream da doc khong dung lai duoc)
+  const res = await withRetry(
+    () =>
+      drive.files.create(
+        {
+          requestBody: { name, appProperties: { app: "driver-cloud" } },
+          media: { body: Readable.from(data) },
+          fields: "id",
+        },
+        { signal }
+      ),
     { signal }
   );
   return res.data.id!;

@@ -3,25 +3,28 @@ import { Readable } from "node:stream";
 import { driveFor, loadAccounts } from "./accounts.js";
 import { findFile } from "./metadata.js";
 import { decryptBlock } from "./crypto.js";
-import { runPool } from "./pool.js";
+import { runPool, withRetry } from "./pool.js";
 import { CONCURRENCY, DATA_DIR } from "./config.js";
 import type { Account, BlockRef } from "./types.js";
 
 // Tai 1 block (da ma hoa) ve buffer
 async function fetchBlock(acc: Account, block: BlockRef, dataDir: string): Promise<Buffer> {
   const drive = driveFor(acc, dataDir);
-  const res = await drive.files.get(
-    { fileId: block.driveFileId!, alt: "media" },
-    { responseType: "stream" }
-  );
-  const stream = res.data as unknown as Readable;
-  const chunks: Buffer[] = [];
-  await new Promise<void>((resolve, reject) => {
-    stream.on("data", (c: Buffer) => chunks.push(c));
-    stream.on("end", resolve);
-    stream.on("error", reject);
+  // Thu lai ca thao tac lay stream + doc het (rot giua chung -> tai lai block)
+  return withRetry(async () => {
+    const res = await drive.files.get(
+      { fileId: block.driveFileId!, alt: "media" },
+      { responseType: "stream" }
+    );
+    const stream = res.data as unknown as Readable;
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      stream.on("data", (c: Buffer) => chunks.push(c));
+      stream.on("end", resolve);
+      stream.on("error", reject);
+    });
+    return Buffer.concat(chunks);
   });
-  return Buffer.concat(chunks);
 }
 
 export interface DownloadOptions {
