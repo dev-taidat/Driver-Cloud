@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driver Cloud</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- ===== Thiet lap (chi hien khi chua co OAuth client) ===== -->
+    <div id="setup" class="center hidden">
+      <div class="setup-card">
+        <h1>☁️ Driver Cloud</h1>
+        <h2>Cau hinh Google OAuth</h2>
+        <p class="muted">Dan Client ID & Client Secret (loai Desktop app) tu Google Cloud Console.</p>
+        <input id="clientId" placeholder="Client ID" />
+        <input id="clientSecret" placeholder="Client Secret" />
+        <button id="saveClient" class="btn-primary">Luu</button>
+        <p id="setupErr" class="err"></p>
+      </div>
+    </div>
+
+    <!-- ===== Giao dien chinh (giong Google Drive) ===== -->
+    <div id="app" class="hidden">
+      <!-- Thanh tren cung -->
+      <header class="topbar">
+        <div class="brand"><span class="logo">☁️</span> Driver Cloud</div>
+        <div class="searchbox">
+          <span class="search-ic">🔍</span>
+          <input id="search" placeholder="Tim trong Driver Cloud" />
+          <span id="searchClear" class="search-clear hidden">✕</span>
+        </div>
+        <div class="topright">
+          <button id="openAccounts" class="icon-btn" title="Tai khoan & dung luong">⚙️</button>
+        </div>
+      </header>
+
+      <div class="body">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+          <div class="new-wrap">
+            <button id="newBtn" class="new-btn">＋ Mới</button>
+            <div id="newMenu" class="menu hidden">
+              <div class="menu-item" data-act="folder">📁 Thư mục mới</div>
+              <div class="menu-item" data-act="upload">⬆️ Tải tệp lên</div>
+            </div>
+          </div>
+          <nav class="nav">
+            <div class="nav-item active" id="navMyDrive">🗂️ Drive của tôi</div>
+            <div class="nav-item" id="navTrash">🗑️ Thùng rác</div>
+          </nav>
+          <div class="storage">
+            <div class="bar"><div id="usedBar"></div></div>
+            <div id="storageText" class="muted small">—</div>
+          </div>
+        </aside>
+
+        <!-- Khu vuc chinh -->
+        <main class="content" id="content">
+          <div class="crumbs" id="crumbs"></div>
+
+          <div id="emptyHint" class="empty-hint hidden">
+            <div class="big">📂</div>
+            <p>Thư mục trống. Kéo-thả tệp vào đây hoặc bấm <b>＋ Mới</b>.</p>
+          </div>
+
+          <div class="section" id="foldersSection">
+            <div class="section-title">Thư mục</div>
+            <div id="folders" class="grid"></div>
+          </div>
+
+          <div class="section" id="filesSection">
+            <div class="section-title">Tệp</div>
+            <div id="files" class="grid"></div>
+          </div>
+
+          <div id="dropOverlay" class="drop-overlay hidden"><div>Thả để tải lên</div></div>
+        </main>
+      </div>
+
+      <!-- Panel tien trinh (goc duoi phai) -->
+      <div id="progressPanel" class="progress-panel hidden">
+        <div class="pp-head"><span id="ppTitle">Đang tải lên</span><span id="ppClose">✕</span></div>
+        <div id="ppList" class="pp-list"></div>
+      </div>
+
+      <!-- Toasts -->
+      <div id="toasts"></div>
+
+      <!-- Menu chuot phai -->
+      <div id="ctxMenu" class="ctx hidden"></div>
+
+      <!-- Trinh xem anh/video trong app -->
+      <div id="viewer" class="viewer hidden">
+        <div class="viewer-bar">
+          <span id="viewerTitle" class="viewer-title"></span>
+          <div class="viewer-actions">
+            <button id="viewerOpen" class="vbtn" title="Mở bằng ứng dụng ngoài">↗ Mở ngoài</button>
+            <button id="viewerDownload" class="vbtn" title="Tải về">⬇ Tải về</button>
+            <button id="viewerClose" class="vbtn" title="Đóng">✕</button>
+          </div>
+        </div>
+        <div id="viewerBody" class="viewer-body"></div>
+      </div>
+
+      <!-- Modal tai khoan -->
+      <div id="accModal" class="modal hidden">
+        <div class="modal-card">
+          <div class="modal-head">
+            <h3>Tài khoản lưu trữ</h3>
+            <span id="accClose" class="modal-close">✕</span>
+          </div>
+          <div id="accTotal" class="acc-total muted"></div>
+          <div id="accList" class="acc-list"></div>
+          <button id="addAccount" class="btn-primary full">＋ Thêm tài khoản Google</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

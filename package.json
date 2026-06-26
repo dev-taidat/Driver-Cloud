@@ -1,0 +1,86 @@
+{
+  "name": "driver-cloud",
+  "version": "0.2.6",
+  "description": "Gop nhieu tai khoan Google Drive thanh mot pool luu tru thong nhat (file striping + ma hoa)",
+  "type": "module",
+  "main": "electron-main.cjs",
+  "bin": {
+    "dcloud": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "cli": "tsx src/cli.ts",
+    "start": "npm run build && electron .",
+    "dev": "tsc && electron .",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --win --dir",
+    "web": "tsx src/web/server.ts"
+  },
+  "dependencies": {
+    "@googleapis/drive": "^8.14.0",
+    "busboy": "^1.6.0",
+    "express": "^4.21.0",
+    "google-auth-library": "^9.15.0",
+    "open": "^10.1.0",
+    "sharp": "^0.35.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "build": {
+    "appId": "com.drivercloud.app",
+    "productName": "Driver Cloud",
+    "asar": false,
+    "files": [
+      "dist/**/*",
+      "electron-main.cjs",
+      "preload.cjs",
+      "renderer/**/*",
+      "build/icon.ico"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "Driver-Cloud-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Driver-Cloud-Portable-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Driver Cloud",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "Driver-Cloud-${version}-mac-${arch}.${ext}"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "target": [
+        "AppImage"
+      ],
+      "artifactName": "Driver-Cloud-${version}-linux.${ext}"
+    }
+  }
+}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driver Cloud — Đăng nhập</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="center" style="background:#f6f8fc">
+      <div class="setup-card">
+        <h1>☁️ Driver Cloud</h1>
+        <h2>Đăng nhập</h2>
+        <p class="muted">Nhập mật khẩu truy cập web.</p>
+        <input id="pw" type="password" placeholder="Mật khẩu" />
+        <button id="go" class="btn-primary" style="width:100%;margin-top:10px">Vào</button>
+        <p id="err" class="err"></p>
+      </div>
+    </div>
+    <script>
+      const go = document.getElementById("go");
+      const pw = document.getElementById("pw");
+      const err = document.getElementById("err");
+      async function login() {
+        err.textContent = "";
+        const r = await fetch("/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pw.value }),
+        });
+        if (r.ok) location.href = "/";
+        else err.textContent = "Sai mật khẩu.";
+      }
+      go.onclick = login;
+      pw.addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
+    </script>
+  </body>
+</html>
