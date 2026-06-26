@@ -4,24 +4,120 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Driver Cloud — Đăng nhập</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      :root { --b1: #5b8cff; --b2: #7c5bff; }
+      html, body { height: 100%; font-family: "Segoe UI", system-ui, sans-serif; }
+      body {
+        min-height: 100vh; display: flex; align-items: center; justify-content: center;
+        overflow: hidden; position: relative; color: #fff;
+        background: #0b1020;
+      }
+      /* ===== Nền aurora động ===== */
+      .aurora { position: fixed; inset: -40%; z-index: 0; filter: blur(70px); opacity: .85; }
+      .aurora span {
+        position: absolute; border-radius: 50%; mix-blend-mode: screen;
+        animation: drift 18s ease-in-out infinite;
+      }
+      .a1 { width: 50vw; height: 50vw; background: #5b8cff; top: 5%; left: 10%; }
+      .a2 { width: 45vw; height: 45vw; background: #7c5bff; bottom: 0%; right: 8%; animation-delay: -6s; }
+      .a3 { width: 38vw; height: 38vw; background: #3ec6ff; bottom: 20%; left: 30%; animation-delay: -11s; }
+      .a4 { width: 30vw; height: 30vw; background: #b15bff; top: 15%; right: 25%; animation-delay: -3s; }
+      @keyframes drift {
+        0%,100% { transform: translate(0,0) scale(1); }
+        33% { transform: translate(6vw,-4vw) scale(1.15); }
+        66% { transform: translate(-5vw,5vw) scale(.9); }
+      }
+      /* hat sang lo lung */
+      .stars { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+      .stars i {
+        position: absolute; width: 4px; height: 4px; background: #fff; border-radius: 50%;
+        opacity: .4; animation: float 12s linear infinite;
+      }
+      @keyframes float { 0% { transform: translateY(0); opacity: 0; } 10% { opacity: .6; } 90% { opacity: .6; } 100% { transform: translateY(-110vh); opacity: 0; } }
+
+      /* ===== The dang nhap (kinh mo) ===== */
+      .card {
+        position: relative; z-index: 2; width: 380px; max-width: 92vw; padding: 38px 34px 30px;
+        background: rgba(255,255,255,.08); backdrop-filter: blur(22px) saturate(160%);
+        -webkit-backdrop-filter: blur(22px) saturate(160%);
+        border: 1px solid rgba(255,255,255,.18); border-radius: 22px;
+        box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.25);
+        animation: rise .7s cubic-bezier(.2,.8,.2,1) both;
+      }
+      @keyframes rise { from { opacity: 0; transform: translateY(28px) scale(.97); } to { opacity: 1; transform: none; } }
+
+      /* ===== Logo cloud 3D bay ===== */
+      .logo3d { display: flex; justify-content: center; margin-bottom: 6px; perspective: 600px; }
+      .logo3d img {
+        width: 96px; height: 96px; filter: drop-shadow(0 14px 22px rgba(40,60,160,.55));
+        animation: bob 4.5s ease-in-out infinite;
+        transform-style: preserve-3d;
+      }
+      @keyframes bob {
+        0%,100% { transform: translateY(0) rotateZ(-3deg) rotateY(-6deg); }
+        50% { transform: translateY(-12px) rotateZ(3deg) rotateY(6deg); }
+      }
+      h1 { text-align: center; font-size: 25px; font-weight: 700; letter-spacing: .3px; }
+      .brand-grad { background: linear-gradient(90deg,#aecbff,#d6c3ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      h2 { text-align: center; font-size: 16px; font-weight: 600; margin-top: 14px; color: #fff; }
+      .sub { text-align: center; font-size: 13px; color: rgba(255,255,255,.7); margin: 4px 0 18px; }
+
+      input {
+        width: 100%; padding: 13px 15px; margin: 7px 0; font-size: 14px; color: #fff;
+        background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+        border-radius: 12px; transition: .2s; outline: none;
+      }
+      input::placeholder { color: rgba(255,255,255,.55); }
+      input:focus { border-color: #aecbff; background: rgba(255,255,255,.16); box-shadow: 0 0 0 4px rgba(123,91,255,.25); }
+
+      button {
+        width: 100%; margin-top: 12px; padding: 13px; font-size: 15px; font-weight: 600; color: #fff;
+        border: none; border-radius: 12px; cursor: pointer;
+        background: linear-gradient(135deg, var(--b1), var(--b2)); background-size: 180% 180%;
+        box-shadow: 0 10px 24px rgba(91,92,255,.45); transition: .2s; animation: shimmer 6s ease infinite;
+      }
+      @keyframes shimmer { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+      button:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(91,92,255,.6); }
+      button:active { transform: translateY(0); }
+
+      .err { color: #ffb4b4; font-size: 13px; min-height: 18px; text-align: center; margin-top: 8px; }
+      .switch { text-align: center; font-size: 13px; color: rgba(255,255,255,.7); margin-top: 6px; }
+      .switch a { color: #aecbff; text-decoration: none; font-weight: 600; }
+      .switch a:hover { text-decoration: underline; }
+    </style>
   </head>
   <body>
-    <div class="center" style="background:#f6f8fc">
-      <div class="setup-card">
-        <h1>☁️ Driver Cloud</h1>
-        <h2 id="title">Đăng nhập</h2>
-        <p class="muted" id="sub">Đăng nhập để vào kho lưu trữ của bạn.</p>
-        <input id="username" placeholder="Tên đăng nhập" autocomplete="username" />
-        <input id="pw" type="password" placeholder="Mật khẩu" autocomplete="current-password" />
-        <button id="go" class="btn-primary" style="width:100%;margin-top:10px"></button>
-        <p id="err" class="err"></p>
-        <p class="muted" style="text-align:center">
-          <span id="switchText"></span> <a href="#" id="switchLink" style="color:#1a73e8"></a>
-        </p>
-      </div>
+    <div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span></div>
+    <div class="stars" id="stars"></div>
+
+    <div class="card">
+      <div class="logo3d"><img src="/favicon.svg" alt="logo" /></div>
+      <h1>☁️ <span class="brand-grad">Driver Cloud</span></h1>
+      <h2 id="title">Đăng nhập</h2>
+      <p class="sub" id="sub">Đăng nhập để vào kho lưu trữ của bạn.</p>
+      <input id="username" placeholder="Tên đăng nhập" autocomplete="username" />
+      <input id="pw" type="password" placeholder="Mật khẩu" autocomplete="current-password" />
+      <button id="go"></button>
+      <p id="err" class="err"></p>
+      <p class="switch"><span id="switchText"></span> <a href="#" id="switchLink"></a></p>
     </div>
+
     <script>
+      // tao hat sang
+      const stars = document.getElementById("stars");
+      for (let i = 0; i < 22; i++) {
+        const s = document.createElement("i");
+        s.style.left = Math.random() * 100 + "vw";
+        s.style.top = Math.random() * 100 + "vh";
+        s.style.animationDelay = -(Math.random() * 12) + "s";
+        s.style.animationDuration = 8 + Math.random() * 10 + "s";
+        s.style.transform = `scale(${0.5 + Math.random() * 1.5})`;
+        stars.appendChild(s);
+      }
+
       let mode = "login";
       const $ = (id) => document.getElementById(id);
       function applyMode() {
@@ -30,7 +126,7 @@
         $("sub").textContent = login ? "Đăng nhập để vào kho lưu trữ của bạn." : "Tạo tài khoản mới cho Driver Cloud.";
         $("go").textContent = login ? "Đăng nhập" : "Đăng ký";
         $("switchText").textContent = login ? "Chưa có tài khoản?" : "Đã có tài khoản?";
-        $("switchLink").textContent = login ? "Đăng ký" : "Đăng nhập";
+        $("switchLink").textContent = login ? "Đăng ký ngay" : "Đăng nhập";
         $("err").textContent = "";
       }
       $("switchLink").onclick = (e) => { e.preventDefault(); mode = mode === "login" ? "register" : "login"; applyMode(); };
@@ -39,8 +135,7 @@
         const body = JSON.stringify({ username: $("username").value, password: $("pw").value });
         const r = await fetch("/" + mode, { method: "POST", headers: { "Content-Type": "application/json" }, body });
         const d = await r.json().catch(() => ({}));
-        if (r.ok) location.href = "/";
-        else $("err").textContent = d.error || "Lỗi.";
+        if (r.ok) location.href = "/"; else $("err").textContent = d.error || "Lỗi.";
       }
       $("go").onclick = submit;
       $("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });

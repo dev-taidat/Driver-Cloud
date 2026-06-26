@@ -77,7 +77,7 @@ app.post("/logout", (req, res) => {
 
 // ===== Chan: moi route khac phai dang nhap =====
 app.use((req, res, next) => {
-  const open = ["/login", "/register", "/login.html", "/style.css", "/login.js"];
+  const open = ["/login", "/register", "/login.html", "/style.css", "/favicon.svg", "/favicon.png"];
   if (open.includes(req.path)) return next();
   if (currentUserId(req)) return next();
   if (req.path.startsWith("/api") || req.path.startsWith("/oauth")) return res.status(401).json({ error: "Chưa đăng nhập" });
