@@ -364,7 +364,7 @@ async function loadFarms() {
   const list = await api.get("/api/farms");
   const sel = $("farmSelect");
   const has = list.length > 0;
-  $("farmBody").classList.toggle("hidden", !has);
+  $("farmConfig").classList.toggle("hidden", !has);
   $("farmEmpty").classList.toggle("hidden", has);
   $("farmRename").style.display = has ? "" : "none";
   $("farmDelete").style.display = has ? "" : "none";

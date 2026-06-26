@@ -59,34 +59,45 @@
 
           <!-- Tab Family & Chia se (view trong noi dung chinh) -->
           <div id="familyView" class="hidden" style="max-width:640px">
-            <p class="muted small">Chia sẻ cả kho hoặc một thư mục cho người khác qua <b>username</b>. Họ sẽ thấy trong mục "Được chia sẻ với tôi" và nhận thông báo 🔔.</p>
-            <label class="muted small">Chia sẻ mục</label>
-            <select id="famScope" class="fld"></select>
-            <input id="famUser" list="userOptions" placeholder="Username người nhận" />
-            <select id="famPerm" class="fld"><option value="view">Chỉ xem & tải về</option><option value="edit">Xem + tải lên/xóa (sửa)</option></select>
-            <button id="famShareBtn" class="btn-primary full">Chia sẻ</button>
-            <p id="famErr" class="err"></p>
-            <div class="section-title" style="margin-top:10px">Bạn đang chia sẻ dữ liệu</div>
-            <div id="famList" class="acc-list"></div>
+            <p class="muted small">Tạo <b>nhiều farm</b> (nhóm lưu trữ). Chọn/tạo một farm rồi cấu hình thành viên & chia sẻ cho riêng farm đó.</p>
 
-            <hr style="border:none;border-top:1px solid var(--line);margin:18px 0" />
-            <h4 style="margin:0 0 4px">💾 Farm — cấp dung lượng cho thành viên</h4>
-            <p class="muted small">Tạo <b>nhiều farm</b> (nhóm lưu trữ). Mỗi farm cấp X GB cho từng thành viên — họ có <b>kho riêng</b> (bạn không thấy file họ).</p>
+            <!-- BUOC 1: chon/tao farm -->
+            <label class="muted small">Farm</label>
             <div style="display:flex;gap:6px;align-items:center;margin:6px 0">
               <select id="farmSelect" class="fld" style="flex:1;margin:0"></select>
-              <button id="farmNew" class="btn-primary" style="padding:9px 12px;white-space:nowrap">+ Farm</button>
+              <button id="farmNew" class="btn-primary" style="padding:9px 14px;white-space:nowrap">+ Tạo farm</button>
               <button id="farmRename" style="padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:8px" title="Đổi tên farm">✏️</button>
               <button id="farmDelete" style="padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--err)" title="Xóa farm">🗑️</button>
             </div>
-            <div id="farmBody">
+            <div id="farmEmpty" class="hidden" style="text-align:center;color:var(--muted);padding:40px 0">
+              <div style="font-size:46px">👨‍👩‍👧</div>
+              <p>Chưa có farm nào. Bấm <b>+ Tạo farm</b> để bắt đầu.</p>
+            </div>
+
+            <!-- BUOC 2: cau hinh cua farm dang chon (an khi chua co farm) -->
+            <div id="farmConfig" class="hidden">
+              <hr style="border:none;border-top:1px solid var(--line);margin:16px 0" />
+              <h4 style="margin:0 0 4px">💾 Cấp dung lượng cho thành viên</h4>
+              <p class="muted small">Cấp X GB cho thành viên — họ có <b>kho riêng</b> trong pool của bạn (bạn không thấy file họ).</p>
               <input id="grantUser" list="userOptions" placeholder="Username thành viên" />
               <input id="grantGB" type="number" min="1" placeholder="Số GB (vd 50)" class="fld" />
               <button id="grantBtn" class="btn-primary full">Cấp dung lượng vào farm này</button>
               <p id="grantErr" class="err"></p>
               <div class="section-title" style="margin-top:10px">Thành viên <span id="famSummary" class="muted small" style="font-weight:400"></span></div>
               <div id="grantList" class="acc-list"></div>
+
+              <hr style="border:none;border-top:1px solid var(--line);margin:18px 0" />
+              <h4 style="margin:0 0 4px">👥 Chia sẻ dữ liệu (xem/sửa file của bạn)</h4>
+              <p class="muted small">Chia sẻ cả kho hoặc một thư mục cho người khác qua username. Họ thấy trong "Được chia sẻ với tôi".</p>
+              <label class="muted small">Chia sẻ mục</label>
+              <select id="famScope" class="fld"></select>
+              <input id="famUser" list="userOptions" placeholder="Username người nhận" />
+              <select id="famPerm" class="fld"><option value="view">Chỉ xem & tải về</option><option value="edit">Xem + tải lên/xóa (sửa)</option></select>
+              <button id="famShareBtn" class="btn-primary full">Chia sẻ</button>
+              <p id="famErr" class="err"></p>
+              <div class="section-title" style="margin-top:10px">Bạn đang chia sẻ dữ liệu</div>
+              <div id="famList" class="acc-list"></div>
             </div>
-            <p id="farmEmpty" class="muted small hidden">Chưa có farm nào. Bấm <b>+ Farm</b> để tạo.</p>
           </div>
 
           <div id="dropOverlay" class="drop-overlay hidden"><div>Thả để tải lên</div></div>
