@@ -38,7 +38,7 @@ if (!gotLock) {
 // Nap engine ESM tu thu muc dist
 async function loadEngine() {
   const imp = (p) => import(pathToFileURL(path.join(APP_ROOT, "dist", p)).href);
-  const [config, crypto, accounts, auth, uploader, downloader, metadata] = await Promise.all([
+  const [config, crypto, accounts, auth, uploader, downloader, metadata, webdav] = await Promise.all([
     imp("config.js"),
     imp("crypto.js"),
     imp("accounts.js"),
@@ -46,8 +46,9 @@ async function loadEngine() {
     imp("uploader.js"),
     imp("downloader.js"),
     imp("metadata.js"),
+    imp("webdav.js"),
   ]);
-  E = { config, crypto, accounts, auth, uploader, downloader, metadata };
+  E = { config, crypto, accounts, auth, uploader, downloader, metadata, webdav };
 }
 
 function createWindow() {
@@ -84,25 +85,67 @@ function createWindow() {
 }
 
 let tray = null;
-function createTray() {
-  if (tray) return;
-  let img = nativeImage.createFromPath(path.join(APP_ROOT, "build", "icon.png"));
-  if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 });
-  tray = new Tray(img.isEmpty() ? path.join(APP_ROOT, "build", "icon.ico") : img);
-  tray.setToolTip("Driver Cloud");
-  const showWin = () => { if (!win || win.isDestroyed()) createWindow(); else { win.show(); win.focus(); } };
+let davServer = null;
+const DAV_PORT = 4000;
+const { exec } = require("node:child_process");
+
+function showWin() { if (!win || win.isDestroyed()) createWindow(); else { win.show(); win.focus(); } }
+
+function toggleMount() {
+  if (!davServer) {
+    try { davServer = E.webdav.startWebdav(DAV_PORT); } catch (e) {
+      return dialog.showMessageBox(win, { type: "error", message: "Không bật được WebDAV", detail: String(e) });
+    }
+    if (process.platform === "win32") {
+      // Thu map o dia tu dong (can dich vu WebClient dang chay)
+      exec(`net use * \\\\localhost@${DAV_PORT}\\DavWWWRoot /persistent:no`, (err, stdout) => {
+        dialog.showMessageBox(win, {
+          type: "info", title: "Mount ổ đĩa",
+          message: err ? "Đã bật ổ đĩa WebDAV." : "Đã mount thành ổ đĩa!",
+          detail: (err
+            ? `Map thủ công: File Explorer → This PC → Map network drive → http://localhost:${DAV_PORT}\n(Cần bật dịch vụ "WebClient" trong services.msc.)`
+            : (stdout || "")) + `\n\nĐịa chỉ: http://localhost:${DAV_PORT}`,
+        });
+      });
+    } else if (process.platform === "darwin") {
+      exec(`osascript -e 'mount volume "http://localhost:${DAV_PORT}"'`, (err) => {
+        if (err) dialog.showMessageBox(win, { type: "info", message: "Đã bật WebDAV", detail: `Finder → Go → Connect to Server → http://localhost:${DAV_PORT}` });
+      });
+    } else {
+      dialog.showMessageBox(win, { type: "info", message: "Đã bật WebDAV", detail: `Mount: dav://localhost:${DAV_PORT}/` });
+    }
+  } else {
+    davServer.close(); davServer = null;
+    if (process.platform === "win32") exec(`net use \\\\localhost@${DAV_PORT}\\DavWWWRoot /delete /y`, () => {});
+    dialog.showMessageBox(win, { type: "info", message: "Đã ngắt ổ đĩa WebDAV." });
+  }
+  buildTrayMenu();
+}
+
+function buildTrayMenu() {
+  if (!tray) return;
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Mở Driver Cloud", click: showWin },
+      { label: davServer ? "⏏ Ngắt ổ đĩa (WebDAV)" : "💽 Mount thành ổ đĩa (WebDAV)", click: toggleMount },
       {
         label: "Khởi động cùng máy", type: "checkbox",
         checked: app.getLoginItemSettings().openAtLogin,
         click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked, openAsHidden: true }),
       },
       { type: "separator" },
-      { label: "Thoát", click: () => { app.isQuitting = true; app.quit(); } },
+      { label: "Thoát", click: () => { app.isQuitting = true; if (davServer) try { davServer.close(); } catch {} ; app.quit(); } },
     ])
   );
+}
+
+function createTray() {
+  if (tray) return;
+  let img = nativeImage.createFromPath(path.join(APP_ROOT, "build", "icon.png"));
+  if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 });
+  tray = new Tray(img.isEmpty() ? path.join(APP_ROOT, "build", "icon.ico") : img);
+  tray.setToolTip("Driver Cloud");
+  buildTrayMenu();
   tray.on("double-click", showWin);
 }
 
