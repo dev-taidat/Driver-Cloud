@@ -20,7 +20,7 @@ function loadAddon() {
   throw new Error("Khong nap duoc cloudfiles.node: " + (lastErr && lastErr.message));
 }
 
-let rootDir = null, started = false;
+let rootDir = null, started = false, rootName = "";
 let listDirFn = null, fetchRangeFn = null;
 
 // Windows can du lieu file -> goi fetchRange (tai thang tu Drive) roi tra ve
@@ -40,26 +40,40 @@ function onFetch(reqId, identity, offset, length) {
   })();
 }
 
-// Tao placeholder cho toan bo cay thu muc cloud (de quy)
-async function populate(cloudDir) {
-  const base = cloudDir === "/" ? rootDir : path.join(rootDir, cloudDir.replace(/^\//, "").replace(/\//g, path.sep));
-  let d;
-  try { d = await listDirFn(cloudDir); } catch { return; }
-  for (const folderPath of (d.folders || [])) {
-    const name = folderPath.replace(/\/+$/, "").split("/").pop();
-    try { cf.createPlaceholder(base, name, "", 0, true); } catch {}
-    await populate(folderPath);
-  }
-  for (const f of (d.files || [])) {
-    if (f.complete === false) continue;
-    try { cf.createPlaceholder(base, f.name, f.id, f.size || 0, false); } catch {}
-  }
+// Windows liet ke 1 thu muc -> tra danh sach con (placeholder on-demand)
+function onList(reqId, rawPath) {
+  (async () => {
+    try {
+      // rawPath = NormalizedPath: duong dan tuyet doi tuong doi volume, vd "\Users\cudat\Driver Cloud\Sub"
+      // -> bo prefix duong dan root (khong ke o dia) de ra cloud dir.
+      let p = String(rawPath || "").replace(/\\/g, "/");
+      const rootRel = rootDir.replace(/\\/g, "/").replace(/^[A-Za-z]:/, ""); // "/Users/cudat/Driver Cloud"
+      if (p.toLowerCase().startsWith(rootRel.toLowerCase())) p = p.slice(rootRel.length);
+      let cloudDir = "/" + p.replace(/^\/+/, "");
+      cloudDir = cloudDir.replace(/\/+$/, "") || "/";
+      const d = await listDirFn(cloudDir);
+      const lines = [];
+      for (const folderPath of (d.folders || [])) {
+        const name = folderPath.replace(/\/+$/, "").split("/").pop();
+        lines.push(name + "\t1\t0\t");
+      }
+      for (const f of (d.files || [])) {
+        if (f.complete === false) continue;
+        lines.push(f.name + "\t0\t" + (f.size || 0) + "\t" + f.id);
+      }
+      cf.transferPlaceholders(reqId, lines.join("\n"));
+    } catch (e) {
+      console.log("[cloudmount] list loi:", e && e.message);
+      try { cf.transferPlaceholders(reqId, ""); } catch {}
+    }
+  })();
 }
 
 async function startCloudMount({ root, listDir, fetchRange }) {
   loadAddon();
   if (started) return rootDir; // da mount roi -> khong mount lai (tranh 0x17A)
   rootDir = root;
+  rootName = path.basename(root);
   listDirFn = listDir;
   fetchRangeFn = fetchRange;
   fs.mkdirSync(rootDir, { recursive: true });
@@ -68,11 +82,10 @@ async function startCloudMount({ root, listDir, fetchRange }) {
   try { cf.unregister(rootDir); } catch {}
   const hrReg = cf.register(rootDir, "Driver Cloud", "1.0");
   if (hrReg !== 0) throw new Error("register HRESULT 0x" + (hrReg >>> 0).toString(16));
-  const hrConn = cf.connect(rootDir, onFetch);
+  const hrConn = cf.connect(rootDir, onFetch, onList);
   // 0x8007017A = da connect roi -> coi nhu thanh cong (idempotent)
   if (hrConn !== 0 && (hrConn >>> 0) !== 0x8007017a) throw new Error("connect HRESULT 0x" + (hrConn >>> 0).toString(16));
   started = true;
-  await populate("/");
   return rootDir;
 }
 
