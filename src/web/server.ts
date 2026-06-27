@@ -211,6 +211,7 @@ app.post("/api/upload", (req, res) => {
   const dir = reqDir(req);
   const key = ensureKeyNoPassword(dir);
   const targetDir = String(req.query.dir || "/");
+  const replaceId = req.query.replaceId ? String(req.query.replaceId) : "";
   const bb = busboy({ headers: req.headers });
   let finished = false;
   bb.on("file", (_n, stream, info) => {
@@ -222,6 +223,8 @@ app.post("/api/upload", (req, res) => {
       if (finished) return; finished = true;
       try {
         const logical = await uploadFile(tmpPath, key, { dir: targetDir, dataDir: dir });
+        // Thay the file cu (edit & sync): xoa han ban cu sau khi ban moi da len xong
+        if (replaceId) { const old = findFile(replaceId, dir); if (old && old.id !== logical.id) { try { await purge(old, dir); } catch {} } }
         const ext = (fileName.split(".").pop() || "").toLowerCase();
         if (IMG_EXT.includes(ext)) {
           try {

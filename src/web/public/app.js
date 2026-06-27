@@ -119,10 +119,12 @@ function fileCard(f) {
   const menu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, [
     { icon:"👁️", label:"Mở / Xem", fn:()=>openPreview(f) },
     { icon:"⬇️", label:"Tải về", fn:()=>downloadFile(f.id) },
+    // Chi hien trong app desktop: tai ve -> mo editor -> luu la tu dong bo len cloud
+    (window.dcDesktop && window.dcDesktop.isDesktop) ? { icon:"🖊️", label:"Mở để sửa (đồng bộ)", fn:async()=>{const r=await window.dcDesktop.edit(f.id,f.name,currentDir); if(r&&r.ok)toast("Đang mở để sửa — lưu là tự đồng bộ lên cloud"); else toast((r&&r.error)||"Không mở được");} } : null,
     { icon:"📂", label:"Chuyển tới…", fn:()=>openMove(f) },
     { icon:"✏️", label:"Đổi tên", fn:async()=>{const n=await askPrompt("Tên mới:",f.name); if(n&&n!==f.name){await api.post("/api/rename",{id:f.id,newName:n});render();}} },
     { icon:"🗑️", label:"Xóa", danger:true, fn:async()=>{await api.post("/api/remove",{id:f.id});toast("Đã chuyển vào thùng rác");render();refreshStorage();} },
-  ]); };
+  ].filter(Boolean)); };
   el.querySelector(".more").onclick = menu; el.oncontextmenu = menu;
   return el;
 }

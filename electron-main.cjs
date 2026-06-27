@@ -75,7 +75,7 @@ function createWindow() {
     backgroundColor: "#f5f7fb",
     title: "Driver Cloud",
     icon: path.join(APP_ROOT, "build", "icon.ico"),
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(APP_ROOT, "preload.cjs") },
   });
   win.removeMenu();
   // Tu dong luu file tai ve vao thu muc Downloads (khong hoi)
@@ -177,6 +177,65 @@ async function toggleMount() {
     new Notification({ title: "Driver Cloud", body: "Đã mount ổ đĩa. Mở This PC để xem (nếu chưa có: bật dịch vụ WebClient)." }).show();
   } else new Notification({ title: "Driver Cloud", body: "Đã mount ổ đĩa vào Finder." }).show();
 }
+
+// ===== MO FILE DE SUA: tai ve -> mo bang editor mac dinh -> tu dong bo len cloud khi luu =====
+// Day la cach edit file cloud thuc te (Google Drive cung tai ve cache roi sync nguoc).
+const activeEdits = new Map(); // localPath -> { id, dir, name, busy, timer, baseUrl }
+function editsDir() { const d = path.join(os.homedir(), ".driver-cloud", "edits"); fs.mkdirSync(d, { recursive: true }); return d; }
+
+async function uploadEdited(local) {
+  const st = activeEdits.get(local);
+  if (!st || st.busy) return;
+  st.busy = true;
+  try {
+    const cookie = await getSessionCookie();
+    const buf = fs.readFileSync(local);
+    if (!buf.length) { st.busy = false; return; }
+    const fd = new FormData();
+    fd.append("file", new Blob([buf]), st.name);
+    const url = `${st.baseUrl}/api/upload?dir=${encodeURIComponent(st.dir)}&replaceId=${encodeURIComponent(st.id)}`;
+    const r = await fetch(url, { method: "POST", headers: cookie ? { Cookie: cookie } : {}, body: fd });
+    if (r.ok) {
+      const j = await r.json().catch(() => ({}));
+      if (j && j.id) st.id = j.id; // lan luu sau se thay the ban moi nhat
+      new Notification({ title: "Driver Cloud", body: "Đã đồng bộ bản sửa lên cloud: " + st.name }).show();
+    } else {
+      new Notification({ title: "Driver Cloud", body: "Đồng bộ thất bại: " + st.name }).show();
+    }
+  } catch {} finally { st.busy = false; }
+}
+
+function watchEdit(local) {
+  // Poll mtime/size (ben voi kieu luu atomic cua nhieu editor). Luu xong -> debounce roi upload.
+  fs.watchFile(local, { interval: 2000 }, (cur, prev) => {
+    if (cur.size > 0 && cur.mtimeMs !== prev.mtimeMs) {
+      const st = activeEdits.get(local); if (!st) return;
+      clearTimeout(st.timer);
+      st.timer = setTimeout(() => uploadEdited(local), 1500);
+    }
+  });
+}
+
+ipcMain.handle("edit:open", async (_e, { id, name, dir }) => {
+  try {
+    const cookie = await getSessionCookie();
+    if (!cookie) return { ok: false, error: "Chưa đăng nhập" };
+    const baseUrl = getAppUrl().replace(/\/+$/, "");
+    const safe = String(name || id).replace(/[\\/:*?"<>|]/g, "_");
+    const local = path.join(editsDir(), id + "__" + safe);
+    if (!activeEdits.has(local)) {
+      const r = await fetch(`${baseUrl}/api/download/${id}`, { headers: { Cookie: cookie } });
+      if (!r.ok) return { ok: false, error: "Tải file thất bại" };
+      const ab = await r.arrayBuffer();
+      fs.writeFileSync(local, Buffer.from(ab));
+      activeEdits.set(local, { id, dir: dir || "/", name: safe, busy: false, baseUrl });
+      watchEdit(local);
+    }
+    await shell.openPath(local);
+    new Notification({ title: "Driver Cloud", body: "Đang sửa: " + safe + "\nLưu trong editor là tự đồng bộ lên cloud." }).show();
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+});
 
 function changeServer() {
   const r = dialog.showMessageBoxSync(win, {

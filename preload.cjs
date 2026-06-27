@@ -55,3 +55,10 @@ contextBridge.exposeInMainWorld("api", {
     return () => ipcRenderer.removeListener("toast", listener);
   },
 });
+
+// Cau noi cho ban WEB chay trong app desktop: mo file de SUA (tai ve -> mo editor ->
+// luu la tu dong bo len cloud). Trang web kiem tra window.dcDesktop?.isDesktop de hien nut.
+contextBridge.exposeInMainWorld("dcDesktop", {
+  isDesktop: true,
+  edit: (id, name, dir) => ipcRenderer.invoke("edit:open", { id, name, dir }),
+});
