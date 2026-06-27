@@ -15,6 +15,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -30,9 +31,19 @@ jobs:
         shell: bash
         run: |
           cd native/cloudfiles
-          ELECTRON_VER=$(node -p "require('electron/package.json').version")
-          echo "Electron $ELECTRON_VER"
-          npx node-gyp rebuild --runtime=electron --target=$ELECTRON_VER --dist-url=https://electronjs.org/headers --arch=x64
+          EV=$(node -p "require('electron/package.json').version")
+          echo "Electron $EV"
+          GYP="$GITHUB_WORKSPACE/node_modules/node-gyp/bin/node-gyp.js"
+          if [ ! -f "$GYP" ]; then echo "dung npx node-gyp"; GYP=""; fi
+          run_gyp() { if [ -n "$GYP" ]; then node "$GYP" "$@"; else npx --yes node-gyp "$@"; fi; }
+          ok=0
+          for i in 1 2 3; do
+            run_gyp rebuild --runtime=electron --target=$EV --dist-url=https://electronjs.org/headers --arch=x64 && ok=1 && break
+            echo "::warning::node-gyp lan $i that bai, thu lai sau 8s..."; sleep 8
+          done
+          if [ "$ok" != "1" ]; then echo "::error::node-gyp that bai 3 lan"; exit 1; fi
+          if [ ! -f build/Release/cloudfiles.node ]; then echo "::error::khong thay cloudfiles.node sau build"; exit 1; fi
+          ls -la build/Release/cloudfiles.node
       - name: Build installer
         # Khi push tag (v*) -> publish len GitHub Releases (de app tu cap nhat).
         # Khi bam Run workflow thuong -> chi build, khong publish.
