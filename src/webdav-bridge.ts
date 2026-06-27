@@ -34,12 +34,19 @@ async function resolve(ctx: Ctx, p: string): Promise<{ kind: "folder" } | { kind
   return f ? { kind: "file", f } : null;
 }
 
-function propXml(href: string, col: boolean, size: number, name: string): string {
+function propXml(href: string, col: boolean, size: number, name: string, root = false): string {
+  // Bao dung luong o dia cho root (Finder/Explorer can de hien thi o)
+  const quota = root ? `<D:quota-available-bytes>1099511627776</D:quota-available-bytes><D:quota-used-bytes>0</D:quota-used-bytes>` : "";
   return `<D:response><D:href>${xmlEsc(href)}</D:href><D:propstat><D:prop>` +
     `<D:displayname>${xmlEsc(name)}</D:displayname>` +
     (col ? "<D:resourcetype><D:collection/></D:resourcetype>" : `<D:resourcetype/><D:getcontentlength>${size}</D:getcontentlength>`) +
-    `<D:getlastmodified>${new Date().toUTCString()}</D:getlastmodified>` +
+    `<D:getlastmodified>${new Date().toUTCString()}</D:getlastmodified>${quota}` +
     `</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`;
+}
+// File rac do macOS Finder / Windows tao (.DS_Store, ._*, .hidden...) -> khong proxy
+function isJunk(p: string): boolean {
+  const n = baseName(p);
+  return n.startsWith(".") || n.startsWith("._") || n === "desktop.ini" || n === "Thumbs.db";
 }
 
 function urlToPath(u: string): string {
@@ -57,12 +64,19 @@ export function startWebdavBridge(port: number, base: string, cookie: string): h
     try {
       if (m === "OPTIONS") { res.writeHead(200, { DAV: "1,2", "MS-Author-Via": "DAV", Allow: "OPTIONS,GET,HEAD,PUT,DELETE,PROPFIND,PROPPATCH,MKCOL,MOVE,LOCK,UNLOCK" }).end(); return; }
 
+      // Bo qua file rac cua HDH (tranh loi -43 tren macOS): gia vo OK, khong proxy len API
+      if (p !== "/" && isJunk(p)) {
+        if (m === "PROPFIND" || m === "GET" || m === "HEAD") { res.writeHead(404).end(); return; }
+        if (m === "LOCK") { res.writeHead(200, { "Content-Type": "application/xml" }).end(`<?xml version="1.0"?><D:prop xmlns:D="DAV:"><D:lockdiscovery><D:activelock><D:locktoken><D:href>opaquelocktoken:junk</D:href></D:locktoken></D:activelock></D:lockdiscovery></D:prop>`); return; }
+        res.writeHead(m === "PUT" || m === "MKCOL" ? 201 : 204).end(); return;
+      }
+
       if (m === "PROPFIND") {
         const info = await resolve(ctx, p);
         if (!info) { res.writeHead(404).end(); return; }
         let body = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:">`;
         if (info.kind === "folder") {
-          body += propXml(hrefFor(p, true), true, 0, p === "/" ? "Driver Cloud" : baseName(p));
+          body += propXml(hrefFor(p, true), true, 0, p === "/" ? "Driver Cloud" : baseName(p), p === "/");
           if ((req.headers["depth"] || "1") !== "0") {
             const d = await listDir(ctx, p);
             if (d) {
