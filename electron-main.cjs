@@ -223,14 +223,24 @@ async function fetchRange(id, offset, length) {
   const n = fs.readSync(fd, buf, 0, length, offset); fs.closeSync(fd);
   return buf.subarray(0, n);
 }
+// Noi tiep moi upload truc tiep: 1 file da dung 16 luong (no day bang thong) -> lam tung file
+// mot vua nhanh nhat vua tranh no RAM/luong khi copy nhieu file cung luc.
+let _uploadTail = Promise.resolve();
+function serializeUpload(fn) {
+  const result = _uploadTail.then(fn, fn);
+  _uploadTail = result.catch(() => {});
+  return result;
+}
 // Upload THANG len Drive roi commit metadata ve server (web thay file ngay)
-async function uploadDirect(localPath, cloudDir, replaceId) {
-  if (!credsPulled) await pullCreds();
-  const logical = await E.uploader.uploadFile(localPath, engineKey(), { dir: cloudDir || "/", dataDir: SYNC_DIR });
-  const cookie = await getSessionCookie();
-  await fetch(apiBase() + "/api/engine/commit", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify(logical) });
-  if (replaceId) await fetch(apiBase() + "/api/remove", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ id: replaceId }) });
-  return logical;
+function uploadDirect(localPath, cloudDir, replaceId) {
+  return serializeUpload(async () => {
+    if (!credsPulled) await pullCreds();
+    const logical = await E.uploader.uploadFile(localPath, engineKey(), { dir: cloudDir || "/", dataDir: SYNC_DIR });
+    const cookie = await getSessionCookie();
+    await fetch(apiBase() + "/api/engine/commit", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify(logical) });
+    if (replaceId) await fetch(apiBase() + "/api/remove", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ id: replaceId }) });
+    return logical;
+  });
 }
 
 // ===== MOUNT KIEU GOOGLE DRIVE (Windows Cloud Files API - placeholder/hydrate) =====

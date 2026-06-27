@@ -25,10 +25,12 @@ export const FREE_SPACE_MARGIN = 100 * 1024 * 1024; // 100 MB
 
 // Kich thuoc moi BLOCK khi chia file. File se duoc cat thanh nhieu block co
 // kich thuoc nay (block cuoi co the nho hon). Block la don vi upload/ma hoa/resume.
-export const BLOCK_SIZE = 256 * 1024 * 1024; // 256 MB
+// 64MB: file vua (vai tram MB) cung chia thanh nhieu block -> upload/download nhieu luong song song.
+export const BLOCK_SIZE = 64 * 1024 * 1024; // 64 MB
 
-// So block upload/download song song cung luc (gioi han de khong qua tai)
-export const CONCURRENCY = 4;
+// So block upload/download song song. Test thuc te: 16 luong ~68 MB/s (gan tran bang thong),
+// 4 luong chi ~30 MB/s. Block 64MB x 16 luong x2(plain+enc) ~ 2GB RAM dinh - chap nhan duoc.
+export const CONCURRENCY = 16;
 
 // Duong dan file luu master key (da ma hoa bang mat khau nguoi dung)
 export const KEYFILE_PATH = path.join(DATA_DIR, "keyfile.json");
