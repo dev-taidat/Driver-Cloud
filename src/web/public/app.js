@@ -193,6 +193,19 @@ async function uploadFiles(files) {
   render(); refreshStorage();
 }
 function uploadOne(file) {
+  // App desktop + dang o "Drive của tôi" -> upload THANG may<->Drive (nhanh ~10x)
+  if (window.dcDesktop && window.dcDesktop.isDesktop && view === "drive") {
+    const p = window.dcDesktop.pathForFile(file);
+    if (p) return (async () => {
+      show($("progressPanel")); $("ppTitle").textContent = "Đang tải lên (trực tiếp)";
+      const row = progRow("upd:" + file.name + Math.random(), file.name, null);
+      row.querySelector(".pct").textContent = "Đang tải thẳng lên Drive…";
+      const r = await window.dcDesktop.upload(p, currentDir);
+      if (r && r.ok) setProg(row, 1, 1, true);
+      else { row.querySelector(".pct").textContent = "Lỗi: " + ((r && r.error) || ""); toast("Lỗi tải lên " + file.name); }
+      render(); refreshStorage();
+    })();
+  }
   return new Promise((resolve) => {
     show($("progressPanel")); $("ppTitle").textContent = "Đang tải lên";
     const xhr = new XMLHttpRequest();

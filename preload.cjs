@@ -1,10 +1,13 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 // Ban WEB chay trong app desktop. CHI expose window.dcDesktop.
 // (KHONG expose window.api - se dung ten voi `const api` trong web app.js -> SyntaxError lam chet ca trang.)
-// Cau noi mo file de SUA: tai ve -> mo editor -> luu la tu dong bo len cloud.
-// Trang web kiem tra window.dcDesktop?.isDesktop de hien nut.
 contextBridge.exposeInMainWorld("dcDesktop", {
   isDesktop: true,
+  // Mo file de SUA: tai ve -> mo editor -> luu la tu dong bo len cloud
   edit: (id, name, dir) => ipcRenderer.invoke("edit:open", { id, name, dir }),
+  // Lay duong dan that cua file keo-tha (de upload THANG len Drive)
+  pathForFile: (file) => { try { return webUtils.getPathForFile(file); } catch { return null; } },
+  // Upload THANG may<->Drive (nhanh ~10x), bo qua server trung gian
+  upload: (localPath, dir, replaceId) => ipcRenderer.invoke("upload:direct", { localPath, dir, replaceId }),
 });

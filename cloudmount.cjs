@@ -1,7 +1,9 @@
 // ===== MOUNT KIEU GOOGLE DRIVE (Windows Cloud Files API) =====
-// Bien thu muc thanh "sync root": file cloud hien ra duoi dang placeholder (co kich thuoc that,
-// chua ton dung luong). Mo / "Available offline" -> Windows goi onFetch -> ta tai tu cloud ve.
-// "Online only" -> Windows tu giai phong dung luong. Day la co che y het Google Drive File Stream.
+// File cloud hien dang placeholder (chua ton dung luong). Mo / "Available offline" -> Windows
+// goi onFetch -> ta lay du lieu (electron-main tai THANG tu Google Drive, nhanh ~10x) -> tra ve.
+// "Online only" -> Windows tu giai phong dung luong. Co che y het Google Drive File Stream.
+//
+// I/O do electron-main cap qua callback (listDir, fetchRange) de tai truc tiep may<->Drive.
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -12,31 +14,22 @@ function loadAddon() {
   return cf;
 }
 
-let rootDir = null, baseUrl = null, getCookie = null, started = false;
+let rootDir = null, started = false;
+let listDirFn = null, fetchRangeFn = null;
 
-async function api(p) {
-  const cookie = await getCookie();
-  const r = await fetch(baseUrl + p, { headers: cookie ? { Cookie: cookie } : {} });
-  if (!r.ok) throw new Error("API " + p + " -> " + r.status);
-  return r.json();
-}
-
-// Windows can du lieu file -> tai dung doan can (Range) tu cloud roi tra ve
+// Windows can du lieu file -> goi fetchRange (tai thang tu Drive) roi tra ve
 function onFetch(reqId, identity, offset, length) {
   (async () => {
     try {
       const id = String(identity).replace(/\0/g, "");
       const start = Number(offset), len = Number(length);
-      const cookie = await getCookie();
-      const headers = { Range: `bytes=${start}-${start + len - 1}` };
-      if (cookie) headers.Cookie = cookie;
-      const r = await fetch(`${baseUrl}/api/download/${id}`, { headers });
-      const ab = await r.arrayBuffer();
-      let buf = Buffer.from(ab);
-      if (buf.length > len) buf = buf.subarray(0, len); // chi tra dung doan duoc yeu cau
+      let buf = await fetchRangeFn(id, start, len);
+      if (!buf) buf = Buffer.alloc(0);
+      if (buf.length > len) buf = buf.subarray(0, len);
       cf.transferData(reqId, buf, start);
     } catch (e) {
-      console.log("[cloudmount] fetch loi:", e.message);
+      console.log("[cloudmount] fetch loi:", e && e.message);
+      try { cf.transferData(reqId, Buffer.alloc(0), Number(offset)); } catch {}
     }
   })();
 }
@@ -45,23 +38,23 @@ function onFetch(reqId, identity, offset, length) {
 async function populate(cloudDir) {
   const base = cloudDir === "/" ? rootDir : path.join(rootDir, cloudDir.replace(/^\//, "").replace(/\//g, path.sep));
   let d;
-  try { d = await api(`/api/list?dir=${encodeURIComponent(cloudDir)}`); } catch { return; }
-  for (const folderPath of d.folders || []) {
+  try { d = await listDirFn(cloudDir); } catch { return; }
+  for (const folderPath of (d.folders || [])) {
     const name = folderPath.replace(/\/+$/, "").split("/").pop();
     try { cf.createPlaceholder(base, name, "", 0, true); } catch {}
     await populate(folderPath);
   }
-  for (const f of d.files || []) {
+  for (const f of (d.files || [])) {
     if (f.complete === false) continue;
     try { cf.createPlaceholder(base, f.name, f.id, f.size || 0, false); } catch {}
   }
 }
 
-async function startCloudMount({ root, base, cookieFn }) {
+async function startCloudMount({ root, listDir, fetchRange }) {
   loadAddon();
   rootDir = root;
-  baseUrl = base.replace(/\/+$/, "");
-  getCookie = cookieFn;
+  listDirFn = listDir;
+  fetchRangeFn = fetchRange;
   fs.mkdirSync(rootDir, { recursive: true });
   const hrReg = cf.register(rootDir, "Driver Cloud", "1.0");
   if (hrReg !== 0) throw new Error("register HRESULT 0x" + (hrReg >>> 0).toString(16));
@@ -77,10 +70,7 @@ function stopCloudMount() {
   try { cf.disconnect(); } catch {}
   started = false;
 }
-function unregister(root) {
-  loadAddon();
-  try { return cf.unregister(root || rootDir); } catch { return -1; }
-}
+function unregister(root) { loadAddon(); try { return cf.unregister(root || rootDir); } catch { return -1; } }
 function isStarted() { return started; }
 
 module.exports = { startCloudMount, stopCloudMount, unregister, isStarted };

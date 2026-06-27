@@ -181,6 +181,58 @@ async function toggleMount() {
   } else new Notification({ title: "Driver Cloud", body: "Đã mount ổ đĩa vào Finder." }).show();
 }
 
+// ===== ENGINE TRUC TIEP: desktop upload/download THANG may<->Google Drive (nhanh ~10x) =====
+// Lay token+key cua chinh user tu server -> chay engine cuc bo -> chi dong bo metadata ve server.
+const SYNC_DIR = path.join(os.homedir(), ".driver-cloud", "web");      // creds + metadata mirror
+const HYDRATE_CACHE = path.join(os.homedir(), ".driver-cloud", "cache"); // file da tai ve (hydrate)
+let credsPulled = false;
+function apiBase() { return getAppUrl().replace(/\/+$/, ""); }
+async function pullCreds() {
+  const cookie = await getSessionCookie();
+  if (!cookie) throw new Error("Chưa đăng nhập");
+  const r = await fetch(apiBase() + "/api/engine/creds", { headers: { Cookie: cookie } });
+  if (!r.ok) throw new Error("Không lấy được thông tin tài khoản (" + r.status + ")");
+  const j = await r.json();
+  fs.mkdirSync(SYNC_DIR, { recursive: true });
+  if (j.accounts) fs.writeFileSync(path.join(SYNC_DIR, "accounts.json"), JSON.stringify(j.accounts));
+  if (j.keyfile) fs.writeFileSync(path.join(SYNC_DIR, "keyfile.json"), JSON.stringify(j.keyfile));
+  if (j.oauthClient) fs.writeFileSync(path.join(SYNC_DIR, "oauth_client.json"), JSON.stringify(j.oauthClient));
+  credsPulled = true;
+}
+function engineKey() { return E.crypto.ensureKeyNoPassword(SYNC_DIR); }
+async function listDirRemote(cloudDir) {
+  const cookie = await getSessionCookie();
+  const r = await fetch(apiBase() + "/api/list?dir=" + encodeURIComponent(cloudDir), { headers: { Cookie: cookie } });
+  if (!r.ok) return { folders: [], files: [] };
+  const d = await r.json();
+  return { folders: d.folders || [], files: (d.files || []).map((f) => ({ id: f.id, name: f.name, size: f.size, complete: f.complete })) };
+}
+async function ensureMeta(id) {
+  if (E.metadata.findFile(id, SYNC_DIR)) return;
+  const cookie = await getSessionCookie();
+  const r = await fetch(apiBase() + "/api/engine/meta/" + id, { headers: { Cookie: cookie } });
+  if (r.ok) { const f = await r.json(); E.metadata.upsertFile(f, SYNC_DIR); }
+}
+// Tai 1 doan file (cho mount hydrate): tai ca file ve cache 1 lan (thang tu Drive) roi doc range
+async function fetchRange(id, offset, length) {
+  await ensureMeta(id);
+  fs.mkdirSync(HYDRATE_CACHE, { recursive: true });
+  const cp = path.join(HYDRATE_CACHE, id);
+  if (!fs.existsSync(cp)) await E.downloader.downloadFile(id, cp, engineKey(), { dataDir: SYNC_DIR });
+  const fd = fs.openSync(cp, "r"); const buf = Buffer.alloc(length);
+  const n = fs.readSync(fd, buf, 0, length, offset); fs.closeSync(fd);
+  return buf.subarray(0, n);
+}
+// Upload THANG len Drive roi commit metadata ve server (web thay file ngay)
+async function uploadDirect(localPath, cloudDir, replaceId) {
+  if (!credsPulled) await pullCreds();
+  const logical = await E.uploader.uploadFile(localPath, engineKey(), { dir: cloudDir || "/", dataDir: SYNC_DIR });
+  const cookie = await getSessionCookie();
+  await fetch(apiBase() + "/api/engine/commit", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify(logical) });
+  if (replaceId) await fetch(apiBase() + "/api/remove", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ id: replaceId }) });
+  return logical;
+}
+
 // ===== MOUNT KIEU GOOGLE DRIVE (Windows Cloud Files API - placeholder/hydrate) =====
 const GMOUNT_ROOT = path.join(os.homedir(), "Driver Cloud");
 async function startGoogleMount() {
@@ -189,7 +241,9 @@ async function startGoogleMount() {
   const cookie = await getSessionCookie();
   if (!cookie) { dialog.showMessageBox(win, { type: "warning", title: "Mount", message: "Hãy đăng nhập trước rồi thử lại." }); return false; }
   try {
-    await cloudmount.startCloudMount({ root: GMOUNT_ROOT, base: getAppUrl(), cookieFn: getSessionCookie });
+    await pullCreds(); // lay token+key de tai THANG tu Drive (nhanh)
+    await cloudmount.startCloudMount({ root: GMOUNT_ROOT, listDir: listDirRemote, fetchRange });
+    startMountWatcher(); // dong bo NGUOC: file moi tha vao o -> upload thang len Drive
     new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show();
     shell.openPath(GMOUNT_ROOT);
     buildTrayMenu();
@@ -200,8 +254,50 @@ async function startGoogleMount() {
   }
 }
 function stopGoogleMount() {
+  stopMountWatcher();
   if (cloudmount) { try { cloudmount.stopCloudMount(); } catch {} }
   buildTrayMenu();
+}
+
+// ===== Phase 2: dong bo NGUOC - file MOI tha vao o -> upload THANG len Drive =====
+let mountWatcher = null;
+const knownPaths = new Set();   // path cloud da co (de khong up lai khi hydrate)
+const uploadingPaths = new Set();
+async function buildKnownPaths(cloudDir) {
+  const d = await listDirRemote(cloudDir);
+  for (const f of d.files) knownPaths.add((cloudDir === "/" ? "" : cloudDir) + "/" + f.name);
+  for (const fold of d.folders) await buildKnownPaths(fold);
+}
+async function startMountWatcher() {
+  knownPaths.clear();
+  try { await buildKnownPaths("/"); } catch {}
+  if (mountWatcher) return;
+  try {
+    mountWatcher = fs.watch(GMOUNT_ROOT, { recursive: true }, (_ev, rel) => {
+      if (!rel) return;
+      if (/(\.tmp$|~$|\.crdownload$|\.partial$)/i.test(rel)) return;
+      const cloudPath = "/" + rel.split(path.sep).join("/");
+      if (knownPaths.has(cloudPath) || uploadingPaths.has(cloudPath)) return;
+      setTimeout(() => maybeUpload(path.join(GMOUNT_ROOT, rel), cloudPath), 1500);
+    });
+  } catch (e) { console.log("[mount watcher] loi:", e && e.message); }
+}
+function stopMountWatcher() { if (mountWatcher) { try { mountWatcher.close(); } catch {} mountWatcher = null; } }
+async function maybeUpload(full, cloudPath) {
+  try {
+    if (knownPaths.has(cloudPath) || uploadingPaths.has(cloudPath) || !fs.existsSync(full)) return;
+    const st = fs.statSync(full);
+    if (st.isDirectory() || st.size === 0) return;
+    // cho copy xong (kich thuoc on dinh)
+    const s1 = st.size; await new Promise((r) => setTimeout(r, 1500));
+    if (!fs.existsSync(full) || fs.statSync(full).size !== s1) { setTimeout(() => maybeUpload(full, cloudPath), 1500); return; }
+    uploadingPaths.add(cloudPath);
+    const cloudDir = cloudPath.slice(0, cloudPath.lastIndexOf("/")) || "/";
+    await uploadDirect(full, cloudDir);
+    knownPaths.add(cloudPath);
+    new Notification({ title: "Driver Cloud", body: "Đã tải lên cloud: " + path.basename(full) }).show();
+  } catch (e) { console.log("[mount upload] loi:", e && e.message); }
+  finally { uploadingPaths.delete(cloudPath); }
 }
 
 // ===== MO FILE DE SUA: tai ve -> mo bang editor mac dinh -> tu dong bo len cloud khi luu =====
@@ -214,21 +310,14 @@ async function uploadEdited(local) {
   if (!st || st.busy) return;
   st.busy = true;
   try {
-    const cookie = await getSessionCookie();
-    const buf = fs.readFileSync(local);
-    if (!buf.length) { st.busy = false; return; }
-    const fd = new FormData();
-    fd.append("file", new Blob([buf]), st.name);
-    const url = `${st.baseUrl}/api/upload?dir=${encodeURIComponent(st.dir)}&replaceId=${encodeURIComponent(st.id)}`;
-    const r = await fetch(url, { method: "POST", headers: cookie ? { Cookie: cookie } : {}, body: fd });
-    if (r.ok) {
-      const j = await r.json().catch(() => ({}));
-      if (j && j.id) st.id = j.id; // lan luu sau se thay the ban moi nhat
-      new Notification({ title: "Driver Cloud", body: "Đã đồng bộ bản sửa lên cloud: " + st.name }).show();
-    } else {
-      new Notification({ title: "Driver Cloud", body: "Đồng bộ thất bại: " + st.name }).show();
-    }
-  } catch {} finally { st.busy = false; }
+    if (!fs.statSync(local).size) { st.busy = false; return; }
+    // Upload THANG len Drive (nhanh ~10x) roi commit metadata + thay the ban cu
+    const logical = await uploadDirect(local, st.dir, st.id);
+    if (logical && logical.id) st.id = logical.id;
+    new Notification({ title: "Driver Cloud", body: "Đã đồng bộ bản sửa lên cloud: " + st.name }).show();
+  } catch (e) {
+    new Notification({ title: "Driver Cloud", body: "Đồng bộ thất bại: " + st.name }).show();
+  } finally { st.busy = false; }
 }
 
 function watchEdit(local) {
@@ -241,6 +330,11 @@ function watchEdit(local) {
     }
   });
 }
+
+ipcMain.handle("upload:direct", async (_e, { localPath, dir, replaceId }) => {
+  try { const lf = await uploadDirect(localPath, dir || "/", replaceId); return { ok: true, id: lf.id }; }
+  catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+});
 
 ipcMain.handle("edit:open", async (_e, { id, name, dir }) => {
   try {

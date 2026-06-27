@@ -16,7 +16,7 @@ import { writeJSON, dataPaths } from "../config.js";
 import {
   listDir, findFile, createFolder, renameFolder, filesUnder, removeFolderEntries,
   renameFile, moveFile, trashFile, restoreFile, listTrash, setThumb, removeFile, baseName,
-  grantFiles, grantUsage, listFiles, listFolders,
+  grantFiles, grantUsage, listFiles, listFolders, upsertFile,
 } from "../metadata.js";
 import * as grants from "./grants.js";
 import * as farms from "./farms.js";
@@ -273,6 +273,26 @@ app.post("/api/upload-raw", (req, res) => {
       done = true; res.json({ ok: true, id: logical.id });
     } catch (e: any) { fs.unlink(tmpPath, () => {}); if (!done) { done = true; res.status(500).json({ error: e.message }); } }
   });
+});
+
+// ===== ENGINE BRIDGE (desktop I/O thang voi Drive, nhanh ~10x) =====
+// Desktop lay token+key (cua chinh user) de upload/download truc tiep may<->Drive,
+// roi commit metadata ve day de web van thay file. Chi tra cho user da dang nhap.
+app.get("/api/engine/creds", (req, res) => {
+  const dir = reqDir(req);
+  ensureKeyNoPassword(dir); // dam bao co keyfile
+  const p = dataPaths(dir);
+  const read = (f: string) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
+  res.json({ accounts: read(p.accounts), keyfile: read(p.keyfile), oauthClient: read(p.oauthClient) });
+});
+app.get("/api/engine/meta/:id", (req, res) => {
+  const f = findFile(req.params.id, reqDir(req));
+  if (!f) return res.status(404).json({ error: "Khong tim thay" });
+  res.json(f);
+});
+app.post("/api/engine/commit", (req, res) => {
+  try { upsertFile(req.body, reqDir(req)); res.json({ ok: true, id: req.body?.id }); }
+  catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 // ===== Download / Preview =====
