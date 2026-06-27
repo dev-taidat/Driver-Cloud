@@ -242,6 +242,39 @@ app.post("/api/upload", (req, res) => {
   req.pipe(bb);
 });
 
+// Upload STREAMING (raw body) - cho WebDAV mount: KHONG nap ca file vao RAM,
+// ghi thang ra file tam roi upload -> file lon (vai GB) khong lam tran bo nho/van mount.
+app.post("/api/upload-raw", (req, res) => {
+  const dir = reqDir(req);
+  const key = ensureKeyNoPassword(dir);
+  const targetDir = String(req.query.dir || "/");
+  const fileName = String(req.query.name || "upload.bin");
+  const replaceId = req.query.replaceId ? String(req.query.replaceId) : "";
+  const tmpPath = path.join(TMP, crypto.randomUUID() + "_" + fileName);
+  const ws = fs.createWriteStream(tmpPath);
+  let done = false;
+  req.pipe(ws);
+  ws.on("error", (e: any) => { if (!done) { done = true; res.status(500).json({ error: e.message }); } fs.unlink(tmpPath, () => {}); });
+  req.on("aborted", () => { try { ws.destroy(); } catch {} fs.unlink(tmpPath, () => {}); });
+  ws.on("close", async () => {
+    if (done) return;
+    try {
+      const logical = await uploadFile(tmpPath, key, { dir: targetDir, dataDir: dir });
+      if (replaceId) { const old = findFile(replaceId, dir); if (old && old.id !== logical.id) { try { await purge(old, dir); } catch {} } }
+      const ext = (fileName.split(".").pop() || "").toLowerCase();
+      if (IMG_EXT.includes(ext)) {
+        try {
+          const sharp = (await import("sharp")).default;
+          const buf = await sharp(tmpPath).rotate().resize(300, 300, { fit: "cover" }).webp({ quality: 72 }).toBuffer();
+          setThumb(logical.id, "data:image/webp;base64," + buf.toString("base64"), dir);
+        } catch {}
+      }
+      fs.unlink(tmpPath, () => {});
+      done = true; res.json({ ok: true, id: logical.id });
+    } catch (e: any) { fs.unlink(tmpPath, () => {}); if (!done) { done = true; res.status(500).json({ error: e.message }); } }
+  });
+});
+
 // ===== Download / Preview =====
 async function ensureDecrypted(req: express.Request, id: string): Promise<{ file: any; out: string }> {
   const dir = reqDir(req);

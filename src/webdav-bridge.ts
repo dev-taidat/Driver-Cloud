@@ -108,15 +108,16 @@ export function startWebdavBridge(port: number, base: string, cookie: string): h
       }
 
       if (m === "PUT") {
-        const chunks: Buffer[] = [];
-        req.on("data", (c) => chunks.push(c));
-        req.on("end", async () => {
-          const buf = Buffer.concat(chunks);
-          const fd = new FormData();
-          fd.append("file", new Blob([buf]), baseName(p));
-          const up = await fetch(`${ctx.base}/api/upload?dir=${encodeURIComponent(parentOf(p))}`, { method: "POST", headers: { Cookie: ctx.cookie }, body: fd });
+        // STREAM thang body len server (khong nap ca file vao RAM -> file lon khong lam van mount)
+        const len = req.headers["content-length"];
+        const headers: any = { Cookie: ctx.cookie, "Content-Type": "application/octet-stream" };
+        if (len) headers["Content-Length"] = len;
+        try {
+          const up = await fetch(`${ctx.base}/api/upload-raw?dir=${encodeURIComponent(parentOf(p))}&name=${encodeURIComponent(baseName(p))}`, {
+            method: "POST", headers, body: req as any, duplex: "half",
+          } as any);
           res.writeHead(up.ok ? 201 : 500).end();
-        });
+        } catch (e: any) { res.writeHead(500).end(String(e?.message || e)); }
         return;
       }
 
