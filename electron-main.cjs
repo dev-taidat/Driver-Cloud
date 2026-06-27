@@ -168,8 +168,13 @@ function doUnmount() {
 }
 // Goi sau khi dang nhap / mo app -> tu mount neu bat
 async function autoMountIfNeeded() {
-  if (!autoMount || davServer) return;
-  await doMount();
+  if (!autoMount) return;
+  // Windows: tu dong hien kho dang o Google Drive (placeholder). macOS: WebDAV.
+  if (process.platform === "win32" && cloudmount) {
+    if (!cloudmount.isStarted()) await startGoogleMount({ silent: true });
+  } else if (!davServer) {
+    await doMount();
+  }
 }
 // Bam tay trong tray
 async function toggleMount() {
@@ -245,21 +250,22 @@ function uploadDirect(localPath, cloudDir, replaceId) {
 
 // ===== MOUNT KIEU GOOGLE DRIVE (Windows Cloud Files API - placeholder/hydrate) =====
 const GMOUNT_ROOT = path.join(os.homedir(), "Driver Cloud");
-async function startGoogleMount() {
-  if (process.platform !== "win32") { dialog.showMessageBox(win, { type: "info", title: "Mount kiểu Google", message: "Hiện chỉ hỗ trợ Windows", detail: "Tính năng placeholder dùng Windows Cloud Files API. macOS sẽ dùng cách khác sau." }); return false; }
-  if (!cloudmount) { dialog.showMessageBox(win, { type: "error", title: "Mount kiểu Google", message: "Module native chưa sẵn sàng", detail: "Bản cài này chưa kèm Cloud Files (cần build lại với addon native)." }); return false; }
+async function startGoogleMount(opts = {}) {
+  const silent = !!opts.silent; // tu dong mount thi khong hien dialog/loi
+  const warn = (o) => { if (!silent) dialog.showMessageBox(win, o); };
+  if (process.platform !== "win32") { warn({ type: "info", title: "Mount kiểu Google", message: "Hiện chỉ hỗ trợ Windows", detail: "Tính năng placeholder dùng Windows Cloud Files API. macOS dùng WebDAV/Mở để sửa." }); return false; }
+  if (!cloudmount) { warn({ type: "error", title: "Mount kiểu Google", message: "Module native chưa sẵn sàng", detail: "Bản cài này chưa kèm Cloud Files (cần build lại với addon native)." }); return false; }
   const cookie = await getSessionCookie();
-  if (!cookie) { dialog.showMessageBox(win, { type: "warning", title: "Mount", message: "Hãy đăng nhập trước rồi thử lại." }); return false; }
+  if (!cookie) { warn({ type: "warning", title: "Mount", message: "Hãy đăng nhập trước rồi thử lại." }); return false; }
   try {
     await pullCreds(); // lay token+key de tai THANG tu Drive (nhanh)
     await cloudmount.startCloudMount({ root: GMOUNT_ROOT, listDir: listDirRemote, fetchRange });
     startMountWatcher(); // dong bo NGUOC: file moi tha vao o -> upload thang len Drive
-    new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show();
-    shell.openPath(GMOUNT_ROOT);
+    if (!silent) { new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show(); shell.openPath(GMOUNT_ROOT); }
     buildTrayMenu();
     return true;
   } catch (e) {
-    dialog.showMessageBox(win, { type: "error", title: "Mount kiểu Google", message: "Không mount được", detail: String((e && e.message) || e) });
+    warn({ type: "error", title: "Mount kiểu Google", message: "Không mount được", detail: String((e && e.message) || e) });
     return false;
   }
 }

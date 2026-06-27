@@ -27,7 +27,6 @@ jobs:
       - run: npm run build
       - name: Build native Cloud Files addon (Windows, against Electron ABI)
         if: matrix.os == 'windows-latest'
-        continue-on-error: true   # neu loi -> van build installer (app van chay, chi tat mount kieu Google)
         shell: bash
         run: |
           cd native/cloudfiles

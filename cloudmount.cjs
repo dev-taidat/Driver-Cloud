@@ -10,8 +10,13 @@ const fs = require("node:fs");
 let cf = null;
 function loadAddon() {
   if (cf) return cf;
-  cf = require(path.join(__dirname, "native", "cloudfiles", "build", "Release", "cloudfiles.node"));
-  return cf;
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, "cloudfiles.node") : null, // ban dong goi (extraResources)
+    path.join(__dirname, "native", "cloudfiles", "build", "Release", "cloudfiles.node"), // khi chay dev
+  ].filter(Boolean);
+  let lastErr;
+  for (const p of candidates) { try { cf = require(p); return cf; } catch (e) { lastErr = e; } }
+  throw new Error("Khong nap duoc cloudfiles.node: " + (lastErr && lastErr.message));
 }
 
 let rootDir = null, started = false;
