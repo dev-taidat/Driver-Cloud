@@ -75,6 +75,21 @@ export function verify(usernameOrEmail: string, password: string): User | null {
   return null;
 }
 
+// Hoan tat ho so cho tai khoan cu (dat username + email)
+export function setProfile(userId: string, username: string, email: string): void {
+  username = (username || "").trim();
+  email = (email || "").trim();
+  if (!/^[a-zA-Z0-9_.]{3,20}$/.test(username)) throw new Error("Username 3-20 ký tự, chỉ chữ/số/_/.");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Email không hợp lệ.");
+  const users = readUsers();
+  const u = users.find((x) => x.id === userId);
+  if (!u) throw new Error("Không tìm thấy tài khoản.");
+  const byU = findByUsername(username); if (byU && byU.id !== userId) throw new Error("Username đã tồn tại.");
+  const byE = findByEmail(email); if (byE && byE.id !== userId) throw new Error("Email đã được dùng.");
+  u.username = username; u.email = email;
+  writeUsers(users);
+}
+
 export function changePassword(userId: string, oldPw: string, newPw: string): void {
   const users = readUsers();
   const u = users.find((x) => x.id === userId);

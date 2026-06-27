@@ -310,8 +310,20 @@ async function loadMe() {
     const m = await api.get("/api/me");
     $("meName").textContent = m.username ? "👤 " + m.username : "";
     if ($("usernameEdit")) $("usernameEdit").value = m.username || "";
+    // Tai khoan cu (chua co email) -> bat hoan tat ho so
+    if (!m.email) {
+      $("pfUsername").value = (m.username || "").includes("@") ? "" : (m.username || "");
+      if ((m.username || "").includes("@")) $("pfEmail").value = m.username;
+      show($("profileModal"));
+    } else { hide($("profileModal")); }
   } catch {}
 }
+$("pfSave").onclick = async () => {
+  $("pfErr").textContent = "";
+  const r = await api.post("/api/account/profile", { username: $("pfUsername").value, email: $("pfEmail").value });
+  if (r.error) return ($("pfErr").textContent = r.error);
+  hide($("profileModal")); toast("Đã cập nhật hồ sơ"); loadMe(); render();
+};
 // Doi username
 if ($("saveUsername")) $("saveUsername").onclick = async () => {
   const r = await api.post("/api/account/username", { username: $("usernameEdit").value });

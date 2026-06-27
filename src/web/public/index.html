@@ -140,6 +140,17 @@
         </div>
       </div>
 
+      <div id="profileModal" class="modal hidden">
+        <div class="modal-card" style="width:400px;max-width:92vw">
+          <h3 style="margin:0 0 8px">Hoàn tất hồ sơ</h3>
+          <p class="muted small">Tài khoản của bạn được tạo theo định dạng cũ (chưa có username/email riêng). Vui lòng đặt để tiếp tục.</p>
+          <input id="pfUsername" list="userOptions" placeholder="Username (chữ/số, không dấu, không khoảng trắng)" />
+          <input id="pfEmail" type="email" placeholder="Email" />
+          <button id="pfSave" class="btn-primary full">Lưu & tiếp tục</button>
+          <p id="pfErr" class="err"></p>
+        </div>
+      </div>
+
       <div id="dialog" class="modal hidden">
         <div class="modal-card" style="width:380px;max-width:92vw">
           <h3 id="dlgTitle" style="margin:0 0 12px;font-size:16px"></h3>
