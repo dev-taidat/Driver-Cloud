@@ -94,8 +94,15 @@ export function startWebdavBridge(port: number, base: string, cookie: string): h
         const info = await resolve(ctx, p);
         if (!info || info.kind !== "file") { res.writeHead(404).end(); return; }
         if (m === "HEAD") { res.writeHead(200, { "Content-Length": String(info.f.size), "Accept-Ranges": "bytes" }).end(); return; }
-        const up = await apiGet(ctx, `/api/download/${info.f.id}`);
-        res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": String(info.f.size) });
+        // Chuyen tiep Range -> chi tai phan can thiet (mo/tua video lon khong phai tai het)
+        const range = req.headers.range;
+        const headers: any = { Cookie: ctx.cookie };
+        if (range) headers.Range = range;
+        const up = await fetch(`${ctx.base}/api/download/${info.f.id}`, { headers });
+        const h: Record<string, string> = { "Accept-Ranges": "bytes", "Content-Type": "application/octet-stream" };
+        const cr = up.headers.get("content-range"); if (cr) h["Content-Range"] = cr;
+        const cl = up.headers.get("content-length"); if (cl) h["Content-Length"] = cl; else h["Content-Length"] = String(info.f.size);
+        res.writeHead(up.status === 206 ? 206 : 200, h);
         if (up.body) Readable.fromWeb(up.body as any).pipe(res); else res.end();
         return;
       }
