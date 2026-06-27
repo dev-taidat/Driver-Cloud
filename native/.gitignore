@@ -1,4 +1,4 @@
-native/*/build/
-native/*/test.cjs
-native/*/cleanup.cjs
-native/hello/
+*/build/
+hello/
+*/test.cjs
+*/cleanup.cjs
