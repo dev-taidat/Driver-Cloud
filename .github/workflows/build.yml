@@ -9,6 +9,9 @@ on:
       - "v*"
   workflow_dispatch:
 
+permissions:
+  contents: write   # de electron-builder publish file cai vao GitHub Releases
+
 jobs:
   build:
     strategy:
