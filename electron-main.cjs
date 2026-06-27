@@ -261,7 +261,15 @@ async function startGoogleMount(opts = {}) {
     await pullCreds(); // lay token+key de tai THANG tu Drive (nhanh)
     await cloudmount.startCloudMount({ root: GMOUNT_ROOT, listDir: listDirRemote, fetchRange });
     startMountWatcher(); // dong bo NGUOC: file moi tha vao o -> upload thang len Drive
-    if (!silent) { new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show(); shell.openPath(GMOUNT_ROOT); }
+    if (!silent) {
+      new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show();
+      shell.openPath(GMOUNT_ROOT);
+    } else if (!readPref("gmountShown", false)) {
+      // Lan dau tu mount -> mo thu muc 1 lan de nguoi dung thay (cac lan sau khong lam phien)
+      writePref("gmountShown", true);
+      new Notification({ title: "Driver Cloud", body: "Kho của bạn giờ ở thư mục 'Driver Cloud' (như Google Drive). Bấm để mở." }).show();
+      shell.openPath(GMOUNT_ROOT);
+    }
     buildTrayMenu();
     return true;
   } catch (e) {
