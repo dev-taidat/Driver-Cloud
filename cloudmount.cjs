@@ -58,14 +58,19 @@ async function populate(cloudDir) {
 
 async function startCloudMount({ root, listDir, fetchRange }) {
   loadAddon();
+  if (started) return rootDir; // da mount roi -> khong mount lai (tranh 0x17A)
   rootDir = root;
   listDirFn = listDir;
   fetchRangeFn = fetchRange;
   fs.mkdirSync(rootDir, { recursive: true });
+  // Don dang ky cu/stale tu lan chay truoc bi crash (tranh "0x17A: da connect boi provider khac")
+  try { cf.disconnect(); } catch {}
+  try { cf.unregister(rootDir); } catch {}
   const hrReg = cf.register(rootDir, "Driver Cloud", "1.0");
   if (hrReg !== 0) throw new Error("register HRESULT 0x" + (hrReg >>> 0).toString(16));
   const hrConn = cf.connect(rootDir, onFetch);
-  if (hrConn !== 0) throw new Error("connect HRESULT 0x" + (hrConn >>> 0).toString(16));
+  // 0x8007017A = da connect roi -> coi nhu thanh cong (idempotent)
+  if (hrConn !== 0 && (hrConn >>> 0) !== 0x8007017a) throw new Error("connect HRESULT 0x" + (hrConn >>> 0).toString(16));
   started = true;
   await populate("/");
   return rootDir;

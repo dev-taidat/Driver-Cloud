@@ -250,7 +250,16 @@ function uploadDirect(localPath, cloudDir, replaceId) {
 
 // ===== MOUNT KIEU GOOGLE DRIVE (Windows Cloud Files API - placeholder/hydrate) =====
 const GMOUNT_ROOT = path.join(os.homedir(), "Driver Cloud");
-async function startGoogleMount(opts = {}) {
+let gMountInFlight = null;
+function startGoogleMount(opts = {}) {
+  // Da mount roi -> coi nhu thanh cong (neu bam tay thi mo thu muc)
+  if (cloudmount && cloudmount.isStarted()) { if (!opts.silent) shell.openPath(GMOUNT_ROOT); return Promise.resolve(true); }
+  // Dang mount do -> doi ket qua, khong chay song song (tranh connect 2 lan -> 0x17A)
+  if (gMountInFlight) return gMountInFlight;
+  gMountInFlight = _startGoogleMount(opts).finally(() => { gMountInFlight = null; });
+  return gMountInFlight;
+}
+async function _startGoogleMount(opts = {}) {
   const silent = !!opts.silent; // tu dong mount thi khong hien dialog/loi
   const warn = (o) => { if (!silent) dialog.showMessageBox(win, o); };
   if (process.platform !== "win32") { warn({ type: "info", title: "Mount kiểu Google", message: "Hiện chỉ hỗ trợ Windows", detail: "Tính năng placeholder dùng Windows Cloud Files API. macOS dùng WebDAV/Mở để sửa." }); return false; }
