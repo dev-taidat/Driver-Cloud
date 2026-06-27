@@ -100,6 +100,10 @@ function createWindow() {
   console.log("[main] loading web:", target);
   win.loadURL(target);
 
+  // Sau khi tai trang / dang nhap xong -> tu mount o dia (neu bat va da dang nhap)
+  win.webContents.on("did-finish-load", () => setTimeout(autoMountIfNeeded, 900));
+  win.webContents.on("did-navigate", () => setTimeout(autoMountIfNeeded, 900));
+
   // Dong cua so = thu nho xuong khay (chay ngam), khong thoat han
   win.on("close", (e) => {
     if (!app.isQuitting) { e.preventDefault(); win.hide(); }
@@ -113,41 +117,49 @@ const { exec } = require("node:child_process");
 
 function showWin() { if (!win || win.isDestroyed()) createWindow(); else { win.show(); win.focus(); } }
 
-async function toggleMount() {
-  if (!davServer) {
-    const url = getAppUrl();
-    let cookies = [];
-    try { cookies = await win.webContents.session.cookies.get({ url, name: "dcsid" }); } catch {}
-    if (!cookies.length) {
-      return dialog.showMessageBox(win, { type: "warning", title: "Mount ổ đĩa", message: "Hãy đăng nhập vào Driver Cloud trước", detail: "Mở app, đăng nhập tài khoản web, rồi mới Mount ổ đĩa." });
-    }
-    try { davServer = E.bridge.startWebdavBridge(DAV_PORT, url, `dcsid=${cookies[0].value}`); } catch (e) {
-      return dialog.showMessageBox(win, { type: "error", message: "Không bật được ổ đĩa", detail: String(e) });
-    }
-    if (process.platform === "win32") {
-      // Thu map o dia tu dong (can dich vu WebClient dang chay)
-      exec(`net use * \\\\localhost@${DAV_PORT}\\DavWWWRoot /persistent:no`, (err, stdout) => {
-        dialog.showMessageBox(win, {
-          type: "info", title: "Mount ổ đĩa",
-          message: err ? "Đã bật ổ đĩa WebDAV." : "Đã mount thành ổ đĩa!",
-          detail: (err
-            ? `Map thủ công: File Explorer → This PC → Map network drive → http://localhost:${DAV_PORT}\n(Cần bật dịch vụ "WebClient" trong services.msc.)`
-            : (stdout || "")) + `\n\nĐịa chỉ: http://localhost:${DAV_PORT}`,
-        });
-      });
-    } else if (process.platform === "darwin") {
-      exec(`osascript -e 'mount volume "http://localhost:${DAV_PORT}"'`, (err) => {
-        if (err) dialog.showMessageBox(win, { type: "info", message: "Đã bật WebDAV", detail: `Finder → Go → Connect to Server → http://localhost:${DAV_PORT}` });
-      });
-    } else {
-      dialog.showMessageBox(win, { type: "info", message: "Đã bật WebDAV", detail: `Mount: dav://localhost:${DAV_PORT}/` });
-    }
-  } else {
-    davServer.close(); davServer = null;
-    if (process.platform === "win32") exec(`net use \\\\localhost@${DAV_PORT}\\DavWWWRoot /delete /y`, () => {});
-    dialog.showMessageBox(win, { type: "info", message: "Đã ngắt ổ đĩa WebDAV." });
-  }
+// Tu dong mount khi mo app (mac dinh bat) - luu trong prefs
+function readPref(key, def) { try { const p = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".driver-cloud", "prefs.json"), "utf8")); return key in p ? p[key] : def; } catch { return def; } }
+function writePref(key, val) { const f = path.join(os.homedir(), ".driver-cloud", "prefs.json"); let p = {}; try { p = JSON.parse(fs.readFileSync(f, "utf8")); } catch {} p[key] = val; fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(p)); }
+let autoMount = readPref("autoMount", true);
+
+async function getSessionCookie() {
+  try { const c = await win.webContents.session.cookies.get({ url: getAppUrl(), name: "dcsid" }); return c.length ? `dcsid=${c[0].value}` : null; } catch { return null; }
+}
+function mapDrive() {
+  if (process.platform === "win32") exec(`net use * \\\\localhost@${DAV_PORT}\\DavWWWRoot /persistent:no`, () => {});
+  else if (process.platform === "darwin") exec(`osascript -e 'mount volume "http://localhost:${DAV_PORT}"'`, () => {});
+}
+function unmapDrive() {
+  if (process.platform === "win32") exec(`net use \\\\localhost@${DAV_PORT}\\DavWWWRoot /delete /y`, () => {});
+}
+// Bat o dia (im lang). Tra ve true neu thanh cong.
+async function doMount() {
+  if (davServer) return true;
+  const cookie = await getSessionCookie();
+  if (!cookie) return false;
+  try { davServer = E.bridge.startWebdavBridge(DAV_PORT, getAppUrl(), cookie); } catch { return false; }
+  mapDrive();
   buildTrayMenu();
+  return true;
+}
+function doUnmount() {
+  if (davServer) { try { davServer.close(); } catch {} davServer = null; }
+  unmapDrive();
+  buildTrayMenu();
+}
+// Goi sau khi dang nhap / mo app -> tu mount neu bat
+async function autoMountIfNeeded() {
+  if (!autoMount || davServer) return;
+  await doMount();
+}
+// Bam tay trong tray
+async function toggleMount() {
+  if (davServer) { doUnmount(); new Notification({ title: "Driver Cloud", body: "Đã ngắt ổ đĩa." }).show(); return; }
+  const ok = await doMount();
+  if (!ok) return dialog.showMessageBox(win, { type: "warning", title: "Mount ổ đĩa", message: "Hãy đăng nhập trước", detail: "Mở app + đăng nhập tài khoản, rồi Mount." });
+  if (process.platform === "win32") {
+    new Notification({ title: "Driver Cloud", body: "Đã mount ổ đĩa. Mở This PC để xem (nếu chưa có: bật dịch vụ WebClient)." }).show();
+  } else new Notification({ title: "Driver Cloud", body: "Đã mount ổ đĩa vào Finder." }).show();
 }
 
 function changeServer() {
@@ -168,7 +180,11 @@ function buildTrayMenu() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Mở Driver Cloud", click: showWin },
-      { label: davServer ? "⏏ Ngắt ổ đĩa" : "💽 Mount thành ổ đĩa", click: toggleMount },
+      { label: davServer ? "⏏ Ngắt ổ đĩa" : "💽 Mount thành ổ đĩa ngay", click: toggleMount },
+      {
+        label: "Tự mount khi mở app", type: "checkbox", checked: autoMount,
+        click: (mi) => { autoMount = mi.checked; writePref("autoMount", autoMount); if (autoMount) autoMountIfNeeded(); },
+      },
       { label: "🔄 Tải lại", click: () => win && win.webContents.reload() },
       { label: "🌐 Đổi địa chỉ server…", click: changeServer },
       {
@@ -177,7 +193,7 @@ function buildTrayMenu() {
         click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked, openAsHidden: true }),
       },
       { type: "separator" },
-      { label: "Thoát", click: () => { app.isQuitting = true; if (davServer) try { davServer.close(); } catch {} ; app.quit(); } },
+      { label: "Thoát", click: () => { app.isQuitting = true; doUnmount(); app.quit(); } },
     ])
   );
 }
@@ -494,7 +510,32 @@ app.whenReady().then(async () => {
   registerIpc();
   createWindow();
   createTray();
+  setupAutoUpdate();
 });
+
+// ===== Tu dong cap nhat (electron-updater) =====
+function setupAutoUpdate() {
+  if (!app.isPackaged) return; // chi chay o ban da dong goi
+  let autoUpdater;
+  try { autoUpdater = require("electron-updater").autoUpdater; } catch { return; }
+  autoUpdater.autoDownload = true;
+  autoUpdater.on("update-available", (info) => {
+    try { new Notification({ title: "Driver Cloud", body: `Có bản mới ${info.version}, đang tải nền…` }).show(); } catch {}
+  });
+  autoUpdater.on("update-downloaded", (info) => {
+    const r = dialog.showMessageBoxSync(win, {
+      type: "info", title: "Cập nhật Driver Cloud",
+      message: `Đã tải bản mới ${info.version}`,
+      detail: "Khởi động lại để cập nhật (không cần tải/cài lại thủ công).",
+      buttons: ["Cập nhật & khởi động lại", "Để sau"], cancelId: 1,
+    });
+    if (r === 0) { app.isQuitting = true; autoUpdater.quitAndInstall(); }
+  });
+  autoUpdater.on("error", (e) => console.log("[updater]", e?.message || e));
+  autoUpdater.checkForUpdates().catch(() => {});
+  // kiem tra lai moi 6 tieng
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 6 * 60 * 60 * 1000);
+}
 // Khong thoat khi dong cua so - app chay ngam trong khay (chi thoat qua menu Thoat)
 app.on("window-all-closed", () => {});
 app.on("activate", () => {
