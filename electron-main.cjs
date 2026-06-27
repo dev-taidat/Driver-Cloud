@@ -126,8 +126,24 @@ async function getSessionCookie() {
   try { const c = await win.webContents.session.cookies.get({ url: getAppUrl(), name: "dcsid" }); return c.length ? `dcsid=${c[0].value}` : null; } catch { return null; }
 }
 function mapDrive() {
-  if (process.platform === "win32") exec(`net use * \\\\localhost@${DAV_PORT}\\DavWWWRoot /persistent:no`, () => {});
-  else if (process.platform === "darwin") exec(`osascript -e 'mount volume "http://localhost:${DAV_PORT}"'`, () => {});
+  if (process.platform === "win32") {
+    const doMap = () => exec(`net use * \\\\localhost@${DAV_PORT}\\DavWWWRoot /persistent:no`, () => {});
+    exec("sc query webclient", (_e, out) => {
+      if (/RUNNING/.test(out || "")) return doMap();
+      // WebClient chua chay -> bat tu dong + nang gioi han kich thuoc file (can admin, UAC 1 lan)
+      const bat = path.join(os.tmpdir(), "dc-webclient.bat");
+      try {
+        fs.writeFileSync(bat, [
+          "sc config webclient start=auto",
+          'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters" /v FileSizeLimitInBytes /t REG_DWORD /d 4294967295 /f',
+          "net start webclient",
+        ].join("\r\n") + "\r\n");
+        exec(`powershell -Command "Start-Process -FilePath '${bat}' -Verb RunAs -WindowStyle Hidden"`, () => setTimeout(doMap, 5000));
+      } catch { doMap(); }
+    });
+  } else if (process.platform === "darwin") {
+    exec(`osascript -e 'mount volume "http://localhost:${DAV_PORT}"'`, () => {});
+  }
 }
 function unmapDrive() {
   if (process.platform === "win32") exec(`net use \\\\localhost@${DAV_PORT}\\DavWWWRoot /delete /y`, () => {});
