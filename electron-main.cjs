@@ -293,15 +293,18 @@ async function _startGoogleMount(opts = {}) {
     await pullCreds(); // lay token+key de tai THANG tu Drive (nhanh)
     await cloudmount.startCloudMount({ root: GMOUNT_ROOT, listDir: listDirRemote, fetchRange });
     registerNavPane(); // hien trong khung dieu huong + This PC (giong Google Drive/OneDrive)
+    substDrive();      // gan chu cai o dia -> hien nhu 1 O (giong Google Drive G:/H:/I:)
     startMountWatcher(); // dong bo NGUOC: file moi tha vao o -> upload thang len Drive
     if (!silent) {
       new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show();
       shell.openPath(GMOUNT_ROOT);
     } else if (!readPref("gmountShown", false)) {
-      // Lan dau tu mount -> mo thu muc 1 lan de nguoi dung thay (cac lan sau khong lam phien)
+      // Lan dau tu mount -> mo 1 lan de nguoi dung thay (cac lan sau khong lam phien)
       writePref("gmountShown", true);
-      new Notification({ title: "Driver Cloud", body: "Kho của bạn giờ ở thư mục 'Driver Cloud' (như Google Drive). Bấm để mở." }).show();
-      shell.openPath(GMOUNT_ROOT);
+      setTimeout(() => {
+        new Notification({ title: "Driver Cloud", body: gMountDrive ? `Kho của bạn giờ là ổ ${gMountDrive}: (như Google Drive). Đang mở…` : "Kho của bạn giờ ở ổ Driver Cloud (như Google Drive). Đang mở…" }).show();
+        shell.openPath(gMountDrive ? gMountDrive + ":\\" : GMOUNT_ROOT);
+      }, 1500);
     }
     buildTrayMenu();
     return true;
@@ -312,8 +315,29 @@ async function _startGoogleMount(opts = {}) {
 }
 function stopGoogleMount() {
   stopMountWatcher();
+  unsubstDrive();
   if (cloudmount) { try { cloudmount.stopCloudMount(); } catch {} }
   buildTrayMenu();
+}
+
+// Gan CHU CAI O DIA cho thu muc Cloud Files -> hien nhu 1 o (giong Google Drive), van giu toc do + placeholder
+let gMountDrive = null;
+function freeDriveLetter() {
+  for (const c of "ZYXWVUTPONMLKJ".split("")) {
+    try { if (!fs.existsSync(c + ":\\")) return c; } catch { return c; }
+  }
+  return null;
+}
+function substDrive() {
+  if (process.platform !== "win32" || gMountDrive) return;
+  const letter = readPref("mountDriveLetter", "") || freeDriveLetter();
+  if (!letter) return;
+  exec(`subst ${letter}: "${GMOUNT_ROOT}"`, (err) => {
+    if (!err) { gMountDrive = letter; writePref("mountDriveLetter", letter); buildTrayMenu(); }
+  });
+}
+function unsubstDrive() {
+  if (gMountDrive) { exec(`subst ${gMountDrive}: /d`, () => {}); gMountDrive = null; }
 }
 
 // ===== Phase 2: dong bo NGUOC - file MOI tha vao o -> upload THANG len Drive =====
