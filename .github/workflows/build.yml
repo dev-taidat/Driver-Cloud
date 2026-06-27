@@ -26,24 +26,8 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run build
-      - name: Build native Cloud Files addon (Windows, against Electron ABI)
-        if: matrix.os == 'windows-latest'
-        shell: bash
-        run: |
-          cd native/cloudfiles
-          EV=$(node -p "require('electron/package.json').version")
-          echo "Electron $EV"
-          GYP="$GITHUB_WORKSPACE/node_modules/node-gyp/bin/node-gyp.js"
-          if [ ! -f "$GYP" ]; then echo "dung npx node-gyp"; GYP=""; fi
-          run_gyp() { if [ -n "$GYP" ]; then node "$GYP" "$@"; else npx --yes node-gyp "$@"; fi; }
-          ok=0
-          for i in 1 2 3; do
-            run_gyp rebuild --runtime=electron --target=$EV --dist-url=https://electronjs.org/headers --arch=x64 && ok=1 && break
-            echo "::warning::node-gyp lan $i that bai, thu lai sau 8s..."; sleep 8
-          done
-          if [ "$ok" != "1" ]; then echo "::error::node-gyp that bai 3 lan"; exit 1; fi
-          if [ ! -f build/Release/cloudfiles.node ]; then echo "::error::khong thay cloudfiles.node sau build"; exit 1; fi
-          ls -la build/Release/cloudfiles.node
+      # KHONG build native tren CI (node-gyp loi tren runner). Dung san native/cloudfiles/prebuilt/cloudfiles.node
+      # (da build cho Electron ABI o may dev) -> dong goi qua win.extraResources.
       - name: Build installer
         # Khi push tag (v*) -> publish len GitHub Releases (de app tu cap nhat).
         # Khi bam Run workflow thuong -> chi build, khong publish.

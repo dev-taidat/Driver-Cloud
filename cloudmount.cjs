@@ -12,7 +12,8 @@ function loadAddon() {
   if (cf) return cf;
   const candidates = [
     process.resourcesPath ? path.join(process.resourcesPath, "cloudfiles.node") : null, // ban dong goi (extraResources)
-    path.join(__dirname, "native", "cloudfiles", "build", "Release", "cloudfiles.node"), // khi chay dev
+    path.join(__dirname, "native", "cloudfiles", "prebuilt", "cloudfiles.node"),        // prebuilt commit san
+    path.join(__dirname, "native", "cloudfiles", "build", "Release", "cloudfiles.node"), // khi chay dev (vua build)
   ].filter(Boolean);
   let lastErr;
   for (const p of candidates) { try { cf = require(p); return cf; } catch (e) { lastErr = e; } }
