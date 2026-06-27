@@ -1,6 +1,6 @@
 // Tien trinh chinh cua Electron (CommonJS de tranh loi ESM-interop cua Electron).
 // Engine viet bang ESM nen duoc nap qua dynamic import() khi app san sang.
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Tray, Menu, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Tray, Menu, nativeImage, Notification } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -21,6 +21,20 @@ const APP_ROOT = __dirname;
 let masterKey = null;
 let win = null;
 let E = null; // gom cac module engine sau khi import
+
+// Dia chi web ma app desktop se mo (de desktop = web 100%, dung chung du lieu).
+// Uu tien: bien moi truong -> file cau hinh -> mac dinh (Railway online).
+const URL_CFG = path.join(os.homedir(), ".driver-cloud", "app-url.txt");
+const DEFAULT_URL = "https://web-production-b012.up.railway.app";
+function getAppUrl() {
+  if (process.env.DRIVER_CLOUD_URL) return process.env.DRIVER_CLOUD_URL;
+  try { const u = fs.readFileSync(URL_CFG, "utf8").trim(); if (u) return u; } catch {}
+  return DEFAULT_URL;
+}
+function setAppUrl(u) {
+  fs.mkdirSync(path.dirname(URL_CFG), { recursive: true });
+  fs.writeFileSync(URL_CFG, u.trim());
+}
 
 // Chi cho phep 1 ban app chay cung luc (tranh chiem cong OAuth / xung dot du lieu)
 const gotLock = app.requestSingleInstanceLock();
@@ -53,30 +67,37 @@ async function loadEngine() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1080,
-    height: 720,
-    minWidth: 860,
+    width: 1100,
+    height: 740,
+    minWidth: 880,
     minHeight: 560,
-    backgroundColor: "#0f1220",
+    backgroundColor: "#f5f7fb",
     title: "Driver Cloud",
     icon: path.join(APP_ROOT, "build", "icon.ico"),
-    webPreferences: {
-      preload: path.join(APP_ROOT, "preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   win.removeMenu();
-  win.webContents.on("console-message", (_e, level, message, line, sourceId) => {
-    console.log(`[renderer] ${message} (${sourceId}:${line})`);
+  // Tu dong luu file tai ve vao thu muc Downloads (khong hoi)
+  win.webContents.session.on("will-download", (_e, item) => {
+    const dir = app.getPath("downloads");
+    let out = path.join(dir, item.getFilename());
+    if (fs.existsSync(out)) {
+      const ext = path.extname(out), base = path.basename(out, ext);
+      let i = 1; while (fs.existsSync(path.join(dir, `${base} (${i})${ext}`))) i++;
+      out = path.join(dir, `${base} (${i})${ext}`);
+    }
+    item.setSavePath(out);
+    item.once("done", (_ev, state) => { if (state === "completed") new Notification({ title: "Driver Cloud", body: "Đã tải về: " + path.basename(out) }).show(); });
   });
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    if (code === -3) return; // bo qua abort
     console.log(`[did-fail-load] ${code} ${desc} ${url}`);
+    win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(
+      `<body style="font-family:sans-serif;background:#0a0d16;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center"><div><h2>Không kết nối được server</h2><p>${getAppUrl()}</p><p style="color:#8b90a8">Kiểm tra mạng, hoặc đổi địa chỉ server ở khay hệ thống (chuột phải icon Driver Cloud).</p></div></body>`));
   });
-  const indexPath = path.join(APP_ROOT, "renderer", "index.html");
-  console.log("[main] loading", indexPath, "exists?", fs.existsSync(indexPath));
-  win.loadFile(indexPath);
+  const target = getAppUrl();
+  console.log("[main] loading web:", target);
+  win.loadURL(target);
 
   // Dong cua so = thu nho xuong khay (chay ngam), khong thoat han
   win.on("close", (e) => {
@@ -122,12 +143,26 @@ function toggleMount() {
   buildTrayMenu();
 }
 
+function changeServer() {
+  const r = dialog.showMessageBoxSync(win, {
+    type: "question", title: "Địa chỉ server",
+    message: "Chọn server Driver Cloud để mở:",
+    detail: `Hiện tại: ${getAppUrl()}\n\n• Online = web của bạn (Railway), dùng ở đâu cũng giống.\n• Localhost = server chạy trên máy này (npm run web).`,
+    buttons: ["Online (Railway)", "Localhost:3000", "Hủy"], cancelId: 2,
+  });
+  if (r === 0) setAppUrl(DEFAULT_URL);
+  else if (r === 1) setAppUrl("http://localhost:3000");
+  else return;
+  if (win) win.loadURL(getAppUrl());
+}
+
 function buildTrayMenu() {
   if (!tray) return;
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Mở Driver Cloud", click: showWin },
-      { label: davServer ? "⏏ Ngắt ổ đĩa (WebDAV)" : "💽 Mount thành ổ đĩa (WebDAV)", click: toggleMount },
+      { label: "🔄 Tải lại", click: () => win && win.webContents.reload() },
+      { label: "🌐 Đổi địa chỉ server…", click: changeServer },
       {
         label: "Khởi động cùng máy", type: "checkbox",
         checked: app.getLoginItemSettings().openAtLogin,
