@@ -250,6 +250,29 @@ function uploadDirect(localPath, cloudDir, replaceId) {
 
 // ===== MOUNT KIEU GOOGLE DRIVE (Windows Cloud Files API - placeholder/hydrate) =====
 const GMOUNT_ROOT = path.join(os.homedir(), "Driver Cloud");
+const NAV_GUID = "{DC10AD00-0000-4000-8000-000000000001}";
+// Hien thu muc "Driver Cloud" trong khung dieu huong + This PC (giong OneDrive/Google Drive)
+function registerNavPane() {
+  if (process.platform !== "win32") return;
+  const base = `HKCU\\Software\\Classes\\CLSID\\${NAV_GUID}`;
+  const ns = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer`;
+  const icon = process.execPath; // icon cua app
+  const cmds = [
+    `reg add "${base}" /ve /d "Driver Cloud" /f`,
+    `reg add "${base}" /v System.IsPinnedToNameSpaceTree /t REG_DWORD /d 1 /f`,
+    `reg add "${base}" /v SortOrderIndex /t REG_DWORD /d 66 /f`,
+    `reg add "${base}\\DefaultIcon" /ve /d "${icon},0" /f`,
+    `reg add "${base}\\InProcServer32" /ve /d "C:\\Windows\\system32\\shell32.dll" /f`,
+    `reg add "${base}\\Instance" /v CLSID /d "{0E5AAE11-A475-4c5b-AB00-C66DE400274E}" /f`,
+    `reg add "${base}\\Instance\\InitPropertyBag" /v Attributes /t REG_DWORD /d 17 /f`,
+    `reg add "${base}\\Instance\\InitPropertyBag" /v TargetFolderPath /d "${GMOUNT_ROOT}" /f`,
+    `reg add "${base}\\ShellFolder" /v FolderValueFlags /t REG_DWORD /d 40 /f`,
+    `reg add "${base}\\ShellFolder" /v Attributes /t REG_DWORD /d 4034920525 /f`,
+    `reg add "${ns}\\Desktop\\NameSpace\\${NAV_GUID}" /ve /d "Driver Cloud" /f`,
+    `reg add "${ns}\\MyComputer\\NameSpace\\${NAV_GUID}" /ve /d "Driver Cloud" /f`,
+  ];
+  exec(cmds.join(" & "), () => {});
+}
 let gMountInFlight = null;
 function startGoogleMount(opts = {}) {
   // Da mount roi -> coi nhu thanh cong (neu bam tay thi mo thu muc)
@@ -269,6 +292,7 @@ async function _startGoogleMount(opts = {}) {
   try {
     await pullCreds(); // lay token+key de tai THANG tu Drive (nhanh)
     await cloudmount.startCloudMount({ root: GMOUNT_ROOT, listDir: listDirRemote, fetchRange });
+    registerNavPane(); // hien trong khung dieu huong + This PC (giong Google Drive/OneDrive)
     startMountWatcher(); // dong bo NGUOC: file moi tha vao o -> upload thang len Drive
     if (!silent) {
       new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show();
