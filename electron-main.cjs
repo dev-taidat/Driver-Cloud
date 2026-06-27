@@ -292,8 +292,7 @@ async function _startGoogleMount(opts = {}) {
   try {
     await pullCreds(); // lay token+key de tai THANG tu Drive (nhanh)
     await cloudmount.startCloudMount({ root: GMOUNT_ROOT, listDir: listDirRemote, fetchRange });
-    registerNavPane(); // hien trong khung dieu huong + This PC (giong Google Drive/OneDrive)
-    substDrive();      // gan chu cai o dia -> hien nhu 1 O (giong Google Drive G:/H:/I:)
+    substDrive();      // gan chu cai o dia + ten "Driver Cloud" -> hien nhu 1 O (giong Google Drive)
     startMountWatcher(); // dong bo NGUOC: file moi tha vao o -> upload thang len Drive
     if (!silent) {
       new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show();
@@ -333,7 +332,12 @@ function substDrive() {
   const letter = readPref("mountDriveLetter", "") || freeDriveLetter();
   if (!letter) return;
   exec(`subst ${letter}: "${GMOUNT_ROOT}"`, (err) => {
-    if (!err) { gMountDrive = letter; writePref("mountDriveLetter", letter); buildTrayMenu(); }
+    if (err) return;
+    gMountDrive = letter; writePref("mountDriveLetter", letter);
+    // Dat ten + icon cho o -> hien "Driver Cloud (Z:)" (giong Google Drive)
+    const di = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\DriveIcons\\${letter}`;
+    exec(`reg add "${di}\\DefaultLabel" /ve /d "Driver Cloud" /f & reg add "${di}\\DefaultIcon" /ve /d "${process.execPath},0" /f`, () => {});
+    buildTrayMenu();
   });
 }
 function unsubstDrive() {
@@ -456,8 +460,7 @@ function buildTrayMenu() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Mở Driver Cloud", click: showWin },
-      ...(process.platform === "win32" && cloudmount ? [{ label: cloudmount.isStarted() ? "⏏ Ngắt ổ Google Drive" : "💎 Hiện kho như ổ Google Drive", click: () => { cloudmount.isStarted() ? stopGoogleMount() : startGoogleMount(); } }] : []),
-      { label: davServer ? "⏏ Ngắt ổ đĩa (WebDAV)" : "💽 Mount ổ mạng (WebDAV)", click: toggleMount },
+      ...(process.platform === "win32" && cloudmount ? [{ label: cloudmount.isStarted() ? (gMountDrive ? `📂 Mở ổ ${gMountDrive}:` : "📂 Mở ổ Driver Cloud") : "💎 Hiện kho thành ổ đĩa", click: () => { if (cloudmount.isStarted()) shell.openPath(gMountDrive ? gMountDrive + ":\\" : GMOUNT_ROOT); else startGoogleMount(); } }] : []),
       {
         label: "Tự mount khi mở app", type: "checkbox", checked: autoMount,
         click: (mi) => { autoMount = mi.checked; writePref("autoMount", autoMount); if (autoMount) autoMountIfNeeded(); },
@@ -785,6 +788,9 @@ app.whenReady().then(async () => {
     return net.fetch(pathToFileURL(fp).toString());
   });
   registerIpc();
+  // Don o WebDAV thua tu ban cu (tranh hien 2 o gay nham lan) - chi giu o Cloud Files
+  if (process.platform === "win32")
+    exec(`powershell -NoProfile -Command "Get-CimInstance Win32_NetworkConnection -ErrorAction SilentlyContinue | Where-Object { $_.RemoteName -like '*localhost@${DAV_PORT}*' } | ForEach-Object { net use $_.LocalName /delete /y }"`, () => {});
   createWindow();
   createTray();
   setupAutoUpdate();
