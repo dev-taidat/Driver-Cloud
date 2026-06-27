@@ -25,6 +25,14 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run build
+      - name: Build native Cloud Files addon (Windows, against Electron ABI)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          cd native/cloudfiles
+          ELECTRON_VER=$(node -p "require('electron/package.json').version")
+          echo "Electron $ELECTRON_VER"
+          npx node-gyp rebuild --runtime=electron --target=$ELECTRON_VER --dist-url=https://electronjs.org/headers --arch=x64
       - name: Build installer
         # Khi push tag (v*) -> publish len GitHub Releases (de app tu cap nhat).
         # Khi bam Run workflow thuong -> chi build, khong publish.

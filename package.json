@@ -1,6 +1,6 @@
 {
   "name": "driver-cloud",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "description": "Gop nhieu tai khoan Google Drive thanh mot pool luu tru thong nhat (file striping + ma hoa)",
   "type": "module",
   "main": "electron-main.cjs",
@@ -49,6 +49,8 @@
       "dist/**/*",
       "electron-main.cjs",
       "preload.cjs",
+      "cloudmount.cjs",
+      "native/cloudfiles/build/Release/*.node",
       "renderer/**/*",
       "build/icon.ico",
       "build/icon.png"

@@ -11,6 +11,9 @@ const VID_EXT = ["mp4", "webm", "ogg", "ogv", "mov", "m4v"];
 const PREVIEW_DIR = path.join(os.tmpdir(), "driver-cloud-view");
 let sharp = null;
 try { sharp = require("sharp"); } catch {}
+// Mount kieu Google Drive (Windows Cloud Files API). Co the chua nap duoc neu sai ABI -> guard.
+let cloudmount = null;
+try { cloudmount = require("./cloudmount.cjs"); } catch (e) { console.log("[cloudmount] khong nap duoc:", e && e.message); }
 
 // Dang ky scheme dcmedia (phai goi TRUOC khi app ready) de phat anh/video trong app
 protocol.registerSchemesAsPrivileged([
@@ -178,6 +181,29 @@ async function toggleMount() {
   } else new Notification({ title: "Driver Cloud", body: "Đã mount ổ đĩa vào Finder." }).show();
 }
 
+// ===== MOUNT KIEU GOOGLE DRIVE (Windows Cloud Files API - placeholder/hydrate) =====
+const GMOUNT_ROOT = path.join(os.homedir(), "Driver Cloud");
+async function startGoogleMount() {
+  if (process.platform !== "win32") { dialog.showMessageBox(win, { type: "info", title: "Mount kiểu Google", message: "Hiện chỉ hỗ trợ Windows", detail: "Tính năng placeholder dùng Windows Cloud Files API. macOS sẽ dùng cách khác sau." }); return false; }
+  if (!cloudmount) { dialog.showMessageBox(win, { type: "error", title: "Mount kiểu Google", message: "Module native chưa sẵn sàng", detail: "Bản cài này chưa kèm Cloud Files (cần build lại với addon native)." }); return false; }
+  const cookie = await getSessionCookie();
+  if (!cookie) { dialog.showMessageBox(win, { type: "warning", title: "Mount", message: "Hãy đăng nhập trước rồi thử lại." }); return false; }
+  try {
+    await cloudmount.startCloudMount({ root: GMOUNT_ROOT, base: getAppUrl(), cookieFn: getSessionCookie });
+    new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show();
+    shell.openPath(GMOUNT_ROOT);
+    buildTrayMenu();
+    return true;
+  } catch (e) {
+    dialog.showMessageBox(win, { type: "error", title: "Mount kiểu Google", message: "Không mount được", detail: String((e && e.message) || e) });
+    return false;
+  }
+}
+function stopGoogleMount() {
+  if (cloudmount) { try { cloudmount.stopCloudMount(); } catch {} }
+  buildTrayMenu();
+}
+
 // ===== MO FILE DE SUA: tai ve -> mo bang editor mac dinh -> tu dong bo len cloud khi luu =====
 // Day la cach edit file cloud thuc te (Google Drive cung tai ve cache roi sync nguoc).
 const activeEdits = new Map(); // localPath -> { id, dir, name, busy, timer, baseUrl }
@@ -255,7 +281,8 @@ function buildTrayMenu() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Mở Driver Cloud", click: showWin },
-      { label: davServer ? "⏏ Ngắt ổ đĩa" : "💽 Mount thành ổ đĩa ngay", click: toggleMount },
+      ...(process.platform === "win32" && cloudmount ? [{ label: cloudmount.isStarted() ? "⏏ Ngắt ổ Google Drive" : "💎 Hiện kho như ổ Google Drive", click: () => { cloudmount.isStarted() ? stopGoogleMount() : startGoogleMount(); } }] : []),
+      { label: davServer ? "⏏ Ngắt ổ đĩa (WebDAV)" : "💽 Mount ổ mạng (WebDAV)", click: toggleMount },
       {
         label: "Tự mount khi mở app", type: "checkbox", checked: autoMount,
         click: (mi) => { autoMount = mi.checked; writePref("autoMount", autoMount); if (autoMount) autoMountIfNeeded(); },
@@ -268,7 +295,7 @@ function buildTrayMenu() {
         click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked, openAsHidden: true }),
       },
       { type: "separator" },
-      { label: "Thoát", click: () => { app.isQuitting = true; doUnmount(); app.quit(); } },
+      { label: "Thoát", click: () => { app.isQuitting = true; doUnmount(); stopGoogleMount(); app.quit(); } },
     ])
   );
 }
