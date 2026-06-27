@@ -52,7 +52,7 @@ if (!gotLock) {
 // Nap engine ESM tu thu muc dist
 async function loadEngine() {
   const imp = (p) => import(pathToFileURL(path.join(APP_ROOT, "dist", p)).href);
-  const [config, crypto, accounts, auth, uploader, downloader, metadata, webdav] = await Promise.all([
+  const [config, crypto, accounts, auth, uploader, downloader, metadata, webdav, bridge] = await Promise.all([
     imp("config.js"),
     imp("crypto.js"),
     imp("accounts.js"),
@@ -61,8 +61,9 @@ async function loadEngine() {
     imp("downloader.js"),
     imp("metadata.js"),
     imp("webdav.js"),
+    imp("webdav-bridge.js"),
   ]);
-  E = { config, crypto, accounts, auth, uploader, downloader, metadata, webdav };
+  E = { config, crypto, accounts, auth, uploader, downloader, metadata, webdav, bridge };
 }
 
 function createWindow() {
@@ -112,10 +113,16 @@ const { exec } = require("node:child_process");
 
 function showWin() { if (!win || win.isDestroyed()) createWindow(); else { win.show(); win.focus(); } }
 
-function toggleMount() {
+async function toggleMount() {
   if (!davServer) {
-    try { davServer = E.webdav.startWebdav(DAV_PORT); } catch (e) {
-      return dialog.showMessageBox(win, { type: "error", message: "Không bật được WebDAV", detail: String(e) });
+    const url = getAppUrl();
+    let cookies = [];
+    try { cookies = await win.webContents.session.cookies.get({ url, name: "dcsid" }); } catch {}
+    if (!cookies.length) {
+      return dialog.showMessageBox(win, { type: "warning", title: "Mount ổ đĩa", message: "Hãy đăng nhập vào Driver Cloud trước", detail: "Mở app, đăng nhập tài khoản web, rồi mới Mount ổ đĩa." });
+    }
+    try { davServer = E.bridge.startWebdavBridge(DAV_PORT, url, `dcsid=${cookies[0].value}`); } catch (e) {
+      return dialog.showMessageBox(win, { type: "error", message: "Không bật được ổ đĩa", detail: String(e) });
     }
     if (process.platform === "win32") {
       // Thu map o dia tu dong (can dich vu WebClient dang chay)
@@ -161,6 +168,7 @@ function buildTrayMenu() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Mở Driver Cloud", click: showWin },
+      { label: davServer ? "⏏ Ngắt ổ đĩa" : "💽 Mount thành ổ đĩa", click: toggleMount },
       { label: "🔄 Tải lại", click: () => win && win.webContents.reload() },
       { label: "🌐 Đổi địa chỉ server…", click: changeServer },
       {
