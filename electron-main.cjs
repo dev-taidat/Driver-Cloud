@@ -130,7 +130,15 @@ async function getSessionCookie() {
 }
 function mapDrive() {
   if (process.platform === "win32") {
-    const doMap = () => exec(`net use * \\\\localhost@${DAV_PORT}\\DavWWWRoot /persistent:no`, () => {});
+    const letter = (readPref("mountDriveLetter", "") || freeDriveLetter() || "Z").replace(":", "");
+    const doMap = () => exec(`net use ${letter}: \\\\localhost@${DAV_PORT}\\DavWWWRoot /persistent:no`, (e) => {
+      if (e) return;
+      gMountDrive = letter; writePref("mountDriveLetter", letter);
+      // dat ten + icon cho o mang -> hien "Driver Cloud (Z:)" (kieu NAS)
+      const di = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\DriveIcons\\${letter}`;
+      exec(`reg add "${di}\\DefaultLabel" /ve /d "Driver Cloud" /f & reg add "${di}\\DefaultIcon" /ve /d "${process.execPath},0" /f`, () => {});
+      buildTrayMenu();
+    });
     exec("sc query webclient", (_e, out) => {
       if (/RUNNING/.test(out || "")) return doMap();
       // WebClient chua chay -> bat tu dong + nang gioi han kich thuoc file (can admin, UAC 1 lan)
@@ -149,14 +157,24 @@ function mapDrive() {
   }
 }
 function unmapDrive() {
-  if (process.platform === "win32") exec(`net use \\\\localhost@${DAV_PORT}\\DavWWWRoot /delete /y`, () => {});
+  if (process.platform === "win32" && gMountDrive) { exec(`net use ${gMountDrive}: /delete /y`, () => {}); gMountDrive = null; }
 }
-// Bat o dia (im lang). Tra ve true neu thanh cong.
+// Tai 1 dai byte THANG tu Drive (cho o NAS phuc vu Range -> stream video/mo nhanh)
+async function fetchRangeDirect(id, off, len) {
+  await ensureMeta(id);
+  return E.downloader.downloadRange(id, off, len, engineKey(), { dataDir: SYNC_DIR });
+}
+// Bat o NAS (WebDAV chay engine truc tiep). Tra ve true neu thanh cong.
 async function doMount() {
   if (davServer) return true;
   const cookie = await getSessionCookie();
   if (!cookie) return false;
-  try { davServer = E.bridge.startWebdavBridge(DAV_PORT, getAppUrl(), cookie); } catch { return false; }
+  try { await pullCreds(); } catch {}
+  const io = {
+    fetchRange: (id, off, len) => fetchRangeDirect(id, off, len),
+    uploadDirect: (lp, dir, rid) => uploadDirect(lp, dir, rid),
+  };
+  try { davServer = E.bridge.startWebdavBridge(DAV_PORT, getAppUrl(), cookie, io); } catch { return false; }
   mapDrive();
   buildTrayMenu();
   return true;
@@ -169,12 +187,8 @@ function doUnmount() {
 // Goi sau khi dang nhap / mo app -> tu mount neu bat
 async function autoMountIfNeeded() {
   if (!autoMount) return;
-  // Windows: tu dong hien kho dang o Google Drive (placeholder). macOS: WebDAV.
-  if (process.platform === "win32" && cloudmount) {
-    if (!cloudmount.isStarted()) await startGoogleMount({ silent: true });
-  } else if (!davServer) {
-    await doMount();
-  }
+  // O kieu NAS (WebDAV chay engine truc tiep) - ca Windows + macOS
+  if (!davServer) await doMount();
 }
 // Bam tay trong tray
 async function toggleMount() {
@@ -548,7 +562,7 @@ function buildTrayMenu() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Mở Driver Cloud", click: showWin },
-      ...(process.platform === "win32" && cloudmount ? [{ label: cloudmount.isStarted() ? (gMountDrive ? `📂 Mở ổ ${gMountDrive}:` : "📂 Mở ổ Driver Cloud") : "💎 Hiện kho thành ổ đĩa", click: () => { if (cloudmount.isStarted()) shell.openPath(gMountDrive ? gMountDrive + ":\\" : GMOUNT_ROOT); else startGoogleMount(); } }] : []),
+      { label: davServer ? (gMountDrive ? `📂 Mở ổ ${gMountDrive}:` : "📂 Mở ổ Driver Cloud") : "💽 Mount ổ Driver Cloud", click: () => { if (davServer) shell.openPath(gMountDrive ? gMountDrive + ":\\" : `\\\\localhost@${DAV_PORT}\\DavWWWRoot`); else doMount(); } },
       {
         label: "Tự mount khi mở app", type: "checkbox", checked: autoMount,
         click: (mi) => { autoMount = mi.checked; writePref("autoMount", autoMount); if (autoMount) autoMountIfNeeded(); },

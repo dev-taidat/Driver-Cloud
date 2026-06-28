@@ -33,6 +33,41 @@ export interface DownloadOptions {
   signal?: AbortSignal;
 }
 
+// Tai 1 DAI byte [start, start+length) cua file (chi tai cac block phu de -> stream video/mo nhanh,
+// khong phai tai het file). Dung cho mount kieu NAS (WebDAV) phuc vu Range request.
+export async function downloadRange(
+  idOrPath: string,
+  start: number,
+  length: number,
+  masterKey: Buffer,
+  opts: DownloadOptions = {}
+): Promise<Buffer> {
+  const dataDir = opts.dataDir || DATA_DIR;
+  const logical = findFile(idOrPath, dataDir);
+  if (!logical) throw new Error(`Khong tim thay file: ${idOrPath}`);
+  if (!logical.complete) throw new Error("File chua upload xong.");
+  const accById = new Map(loadAccounts(dataDir).map((a) => [a.id, a]));
+  const sorted = [...logical.blocks].sort((a, b) => a.index - b.index);
+  const offsets: number[] = []; let acc = 0;
+  for (const b of sorted) { offsets.push(acc); acc += b.plainSize; }
+  const end = Math.min(start + length, logical.size); // exclusive
+  const out = Buffer.alloc(Math.max(0, end - start));
+  if (out.length === 0) return out;
+  // Chi cac block giao voi [start, end)
+  const tasks = sorted
+    .map((block, i) => ({ block, bs: offsets[i], be: offsets[i] + block.plainSize }))
+    .filter((t) => t.be > start && t.bs < end);
+  await runPool(tasks, CONCURRENCY, async (t) => {
+    const account = accById.get(t.block.accountId);
+    if (!account) throw new Error(`Thieu account ${t.block.accountId}`);
+    const enc = await fetchBlock(account, t.block, dataDir);
+    const plain = decryptBlock(masterKey, enc, t.block.iv, t.block.authTag, t.block.sha256);
+    const from = Math.max(t.bs, start), to = Math.min(t.be, end);
+    plain.copy(out, from - start, from - t.bs, to - t.bs);
+  });
+  return out;
+}
+
 export async function downloadFile(
   idOrPath: string,
   destPath: string,
