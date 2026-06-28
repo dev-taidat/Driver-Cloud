@@ -180,7 +180,8 @@ export function startWebdavBridge(port: number, base: string, cookie: string, io
       res.writeHead(405).end();
     } catch (e: any) { try { res.writeHead(502).end(String(e?.message || e)); } catch {} }
   });
-  server.listen(port, () => console.log(`WebDAV NAS bridge: http://localhost:${port}`));
+  server.on("error", (e: any) => { console.log("WebDAV bridge error:", e && e.message); }); // tranh crash khi cong da dung
+  server.listen(port, "127.0.0.1", () => console.log(`WebDAV NAS bridge: http://localhost:${port}`));
   return server;
 }
 

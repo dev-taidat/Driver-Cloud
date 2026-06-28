@@ -21,6 +21,9 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const APP_ROOT = __dirname;
+// Chan crash: loi le (vd cong dav ban, network...) chi ghi log, KHONG sap app voi dialog do
+process.on("uncaughtException", (e) => { try { console.log("[uncaught]", e && e.message); } catch {} });
+process.on("unhandledRejection", (e) => { try { console.log("[unhandledRejection]", (e && e.message) || e); } catch {} });
 let masterKey = null;
 let win = null;
 let E = null; // gom cac module engine sau khi import
@@ -165,19 +168,25 @@ async function fetchRangeDirect(id, off, len) {
   return E.downloader.downloadRange(id, off, len, engineKey(), { dataDir: SYNC_DIR });
 }
 // Bat o NAS (WebDAV chay engine truc tiep). Tra ve true neu thanh cong.
+let _mounting = false;
 async function doMount() {
   if (davServer) return true;
-  const cookie = await getSessionCookie();
-  if (!cookie) return false;
-  try { await pullCreds(); } catch {}
-  const io = {
-    fetchRange: (id, off, len) => fetchRangeDirect(id, off, len),
-    uploadDirect: (lp, dir, rid) => uploadDirect(lp, dir, rid),
-  };
-  try { davServer = E.bridge.startWebdavBridge(DAV_PORT, getAppUrl(), cookie, io); } catch { return false; }
-  mapDrive();
-  buildTrayMenu();
-  return true;
+  if (_mounting) return false; // dang mount -> tranh goi 2 lan (did-finish-load + did-navigate) -> EADDRINUSE
+  _mounting = true;
+  try {
+    const cookie = await getSessionCookie();
+    if (!cookie) return false;
+    try { await pullCreds(); } catch {}
+    const io = {
+      fetchRange: (id, off, len) => fetchRangeDirect(id, off, len),
+      uploadDirect: (lp, dir, rid) => uploadDirect(lp, dir, rid),
+    };
+    davServer = E.bridge.startWebdavBridge(DAV_PORT, getAppUrl(), cookie, io);
+    mapDrive();
+    buildTrayMenu();
+    return true;
+  } catch (e) { console.log("[doMount] loi:", e && e.message); return false; }
+  finally { _mounting = false; }
 }
 function doUnmount() {
   if (davServer) { try { davServer.close(); } catch {} davServer = null; }
