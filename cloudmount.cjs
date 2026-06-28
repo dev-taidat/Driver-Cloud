@@ -93,9 +93,13 @@ async function startCloudMount({ root, listDir, fetchRange }) {
   try { cf.disconnect(); } catch {}
   try { cf.unregister(rootDir); } catch {}
   try { cf.unregisterSp(SYNC_ROOT_ID); } catch {}
-  // Dang ky Storage Provider (WinRT) -> menu chuot phai online/offline + icon + muc This PC
   const icon = (process.execPath || "") + ",0";
-  const hrReg = cf.register(rootDir, "Driver Cloud", "1.0", icon, SYNC_ROOT_ID);
+  // Co package identity (sparse package) -> dang ky Storage Provider (CO menu chuot phai + icon).
+  // Khong co -> dang ky goc (CfRegisterSyncRoot): van chay file ops, khong menu, khong tao muc trung.
+  let useSp = false; try { useSp = !!cf.hasIdentity(); } catch {}
+  const hrReg = useSp
+    ? cf.registerSp(rootDir, "Driver Cloud", "1.0", icon, SYNC_ROOT_ID)
+    : cf.register(rootDir, "Driver Cloud", "1.0");
   if (hrReg !== 0) throw new Error("register HRESULT 0x" + (hrReg >>> 0).toString(16));
   const hrConn = cf.connect(rootDir, onFetch, onList);
   // 0x8007017A = da connect roi -> coi nhu thanh cong (idempotent)
@@ -155,5 +159,6 @@ function setOnline(cloudPath) { loadAddon(); return cf.dehydrate(mountPathFor(cl
 function convertToOnline(localPath, fileId) { loadAddon(); try { return cf.convert(localPath, fileId, true); } catch { return -1; } }
 // File cloud ONLINE (placeholder chua tai) -> watcher bo qua, khong re-upload
 function isPlaceholder(localPath) { loadAddon(); try { return !!cf.isPlaceholder(localPath); } catch { return false; } }
+function hasIdentity() { loadAddon(); try { return !!cf.hasIdentity(); } catch { return false; } }
 
-module.exports = { startCloudMount, stopCloudMount, unregister, isStarted, setOffline, setOnline, convertToOnline, isPlaceholder, isCloudPath, addCloudPath, getInfo, forget };
+module.exports = { startCloudMount, stopCloudMount, unregister, isStarted, setOffline, setOnline, convertToOnline, isPlaceholder, isCloudPath, addCloudPath, getInfo, forget, hasIdentity };

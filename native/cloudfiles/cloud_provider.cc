@@ -15,6 +15,7 @@
 #include <mutex>
 #include <atomic>
 #include <thread>
+#include <appmodel.h>
 // C++/WinRT cho Storage Provider (menu chuot phai online/offline + icon may/tick + muc trong This PC)
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Storage.h>
@@ -307,6 +308,44 @@ static napi_value Convert(napi_env env, napi_callback_info cbi) {
   napi_value out; napi_create_int32(env, 0, &out); return out;
 }
 
+// hasIdentity() -> true neu app co package identity (sparse package da dang ky) -> co the dung Storage Provider
+static napi_value HasIdentity(napi_env env, napi_callback_info) {
+  UINT32 len = 0;
+  LONG rc = GetCurrentPackageFullName(&len, nullptr);
+  bool has = (rc != APPMODEL_ERROR_NO_PACKAGE);
+  napi_value out; napi_get_boolean(env, has, &out); return out;
+}
+// registerSp(root, name, ver, icon, id) -> dang ky qua StorageProvider (CO menu chuot phai + icon)
+// Chi goi khi hasIdentity() = true. Chay luong MTA rieng.
+static napi_value RegisterSp(napi_env env, napi_callback_info cbi) {
+  size_t argc = 5; napi_value argv[5]; napi_get_cb_info(env, cbi, &argc, argv, nullptr, nullptr);
+  std::wstring root = utf8_to_w(env, argv[0]), name = utf8_to_w(env, argv[1]), ver = utf8_to_w(env, argv[2]),
+               icon = utf8_to_w(env, argv[3]), id = utf8_to_w(env, argv[4]);
+  HRESULT hr = E_FAIL;
+  std::thread t([&]() {
+    try {
+      winrt::init_apartment(winrt::apartment_type::multi_threaded);
+      auto folder = StorageFolder::GetFolderFromPathAsync(winrt::hstring(root)).get();
+      StorageProviderSyncRootInfo info;
+      info.Id(winrt::hstring(id));
+      info.Path(folder);
+      info.DisplayNameResource(winrt::hstring(name));
+      info.IconResource(winrt::hstring(icon));
+      info.Version(winrt::hstring(ver));
+      info.HydrationPolicy(StorageProviderHydrationPolicy::Full);
+      info.HydrationPolicyModifier(StorageProviderHydrationPolicyModifier::None);
+      info.PopulationPolicy(StorageProviderPopulationPolicy::Full);
+      info.InSyncPolicy(StorageProviderInSyncPolicy::Default);
+      info.HardlinkPolicy(StorageProviderHardlinkPolicy::None);
+      info.ShowSiblingsAsGroup(false);
+      info.ProtectionMode(StorageProviderProtectionMode::Unknown);
+      StorageProviderSyncRootManager::Register(info);
+      hr = S_OK;
+    } catch (winrt::hresult_error const& e) { hr = e.code(); } catch (...) { hr = E_FAIL; }
+  });
+  t.join();
+  napi_value out; napi_create_int32(env, (int32_t)hr, &out); return out;
+}
 // isPlaceholder(path) -> true neu la file cloud ONLINE (placeholder, chua tai) -> watcher bo qua, khong re-upload
 static napi_value IsPlaceholder(napi_env env, napi_callback_info cbi) {
   size_t argc = 1; napi_value argv[1]; napi_get_cb_info(env, cbi, &argc, argv, nullptr, nullptr);
@@ -322,6 +361,8 @@ static napi_value Init(napi_env env, napi_value exports) {
     napi_set_named_property(env, exports, n, fn);
   };
   reg("register", Register);
+  reg("registerSp", RegisterSp);
+  reg("hasIdentity", HasIdentity);
   reg("unregisterSp", UnregisterSp);
   reg("dehydrate", Dehydrate);
   reg("hydrate", Hydrate);

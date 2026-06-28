@@ -273,6 +273,30 @@ function registerNavPane() {
   ];
   exec(cmds.join(" & "), () => {});
 }
+// Cap package identity (sparse package da ky) de BAT menu chuot phai Storage Provider tren Windows.
+// Chay 1 lan (UAC). Sau khi cai + khoi dong lai app -> hasIdentity=true -> registerSp -> co menu.
+function ensureIdentity(force) {
+  if (process.platform !== "win32" || !cloudmount) return;
+  try { if (cloudmount.hasIdentity()) return; } catch { return; }
+  if (!force && readPref("spTried", false)) return; // da thu -> khong lam phien lai (tru khi bam tay)
+  const cands = [process.resourcesPath, path.join(APP_ROOT, "native")].filter(Boolean);
+  let msix = null, cer = null;
+  for (const d of cands) { const m = path.join(d, "DriverCloud-sparse.msix"); if (fs.existsSync(m)) { msix = m; cer = path.join(d, "DriverCloud.cer"); break; } }
+  if (!msix) return;
+  const exeDir = path.dirname(process.execPath);
+  writePref("spTried", true);
+  const ps1 = path.join(os.tmpdir(), "dc-sparse.ps1");
+  try {
+    fs.writeFileSync(ps1, [
+      `try { Import-Certificate -FilePath '${cer}' -CertStoreLocation Cert:\\LocalMachine\\TrustedPeople -ErrorAction SilentlyContinue | Out-Null } catch {}`,
+      `try { Add-AppxPackage -Path '${msix}' -ExternalLocation '${exeDir}' } catch {}`,
+    ].join("\r\n") + "\r\n");
+    exec(`powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','${ps1}'"`, () => {
+      new Notification({ title: "Driver Cloud", body: "Đang bật menu chuột phải kiểu Google (bấm Yes ở UAC), xong KHỞI ĐỘNG LẠI app để áp dụng." }).show();
+    });
+  } catch {}
+}
+
 let gMountInFlight = null;
 function startGoogleMount(opts = {}) {
   // Da mount roi -> coi nhu thanh cong (neu bam tay thi mo thu muc)
@@ -485,6 +509,7 @@ function buildTrayMenu() {
     Menu.buildFromTemplate([
       { label: "Mở Driver Cloud", click: showWin },
       ...(process.platform === "win32" && cloudmount ? [{ label: cloudmount.isStarted() ? (gMountDrive ? `📂 Mở ổ ${gMountDrive}:` : "📂 Mở ổ Driver Cloud") : "💎 Hiện kho thành ổ đĩa", click: () => { if (cloudmount.isStarted()) shell.openPath(gMountDrive ? gMountDrive + ":\\" : GMOUNT_ROOT); else startGoogleMount(); } }] : []),
+      ...(process.platform === "win32" && cloudmount && !cloudmount.hasIdentity() ? [{ label: "✨ Bật menu chuột phải (online/offline)", click: () => ensureIdentity(true) }] : []),
       {
         label: "Tự mount khi mở app", type: "checkbox", checked: autoMount,
         click: (mi) => { autoMount = mi.checked; writePref("autoMount", autoMount); if (autoMount) autoMountIfNeeded(); },
@@ -818,6 +843,7 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
   setupAutoUpdate();
+  setTimeout(ensureIdentity, 3000); // bat menu chuot phai (sparse package) - 1 lan, UAC
 });
 
 // ===== Tu dong cap nhat (electron-updater) =====
