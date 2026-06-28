@@ -23,6 +23,8 @@ function loadAddon() {
 let rootDir = null, started = false, rootName = "";
 let listDirFn = null, fetchRangeFn = null;
 const SYNC_ROOT_ID = "DriverCloud!{DC10AD00-0000-4000-8000-000000000001}";
+const populatedDirs = new Set(); // cac thu muc da mo -> sync nen cap nhat
+let syncTimer = null;
 
 // Windows can du lieu file -> goi fetchRange (tai thang tu Drive) roi tra ve
 function onFetch(reqId, identity, offset, length) {
@@ -52,6 +54,7 @@ function onList(reqId, rawPath) {
       if (p.toLowerCase().startsWith(rootRel.toLowerCase())) p = p.slice(rootRel.length);
       let cloudDir = "/" + p.replace(/^\/+/, "");
       cloudDir = cloudDir.replace(/\/+$/, "") || "/";
+      populatedDirs.add(cloudDir); // de sync nen cap nhat thu muc nay
       const d = await listDirFn(cloudDir);
       const lines = [];
       for (const folderPath of (d.folders || [])) {
@@ -90,16 +93,44 @@ async function startCloudMount({ root, listDir, fetchRange }) {
   // 0x8007017A = da connect roi -> coi nhu thanh cong (idempotent)
   if (hrConn !== 0 && (hrConn >>> 0) !== 0x8007017a) throw new Error("connect HRESULT 0x" + (hrConn >>> 0).toString(16));
   started = true;
+  startSync(); // server -> o realtime
   return rootDir;
 }
 
 function stopCloudMount() {
   if (!started) return;
+  stopSync();
   try { cf.disconnect(); } catch {}
   started = false;
 }
 function unregister(root) { loadAddon(); try { return cf.unregister(root || rootDir); } catch { return -1; } }
 function isStarted() { return started; }
+
+// ===== SYNC NEN (server -> o, realtime): doi chieu thu muc da mo voi server moi ~20s =====
+async function syncOnce() {
+  for (const cloudDir of Array.from(populatedDirs)) {
+    let d;
+    try { d = await listDirFn(cloudDir); } catch { continue; }
+    const base = cloudDir === "/" ? rootDir : path.join(rootDir, cloudDir.replace(/^\//, "").replace(/\//g, path.sep));
+    let localEntries;
+    try { localEntries = fs.readdirSync(base); } catch { continue; }
+    const localSet = new Set(localEntries);
+    const serverFolders = (d.folders || []).map((f) => f.replace(/\/+$/, "").split("/").pop());
+    const serverFiles = (d.files || []).filter((f) => f.complete !== false);
+    const serverNames = new Set([...serverFolders, ...serverFiles.map((f) => f.name)]);
+    // THEM: file/folder moi tren server -> tao placeholder online vao o
+    for (const name of serverFolders) if (!localSet.has(name)) { try { cf.createPlaceholder(base, name, "", 0, true); } catch {} }
+    for (const f of serverFiles) if (!localSet.has(f.name)) { try { cf.createPlaceholder(base, f.name, f.id, f.size || 0, false); } catch {} }
+    // XOA: local la placeholder cloud nhung server da xoa -> xoa khoi o (khong dung file FULL user dang cho upload)
+    for (const name of localEntries) {
+      if (serverNames.has(name)) continue;
+      const fp = path.join(base, name);
+      try { if (cf.isPlaceholder(fp)) fs.rmSync(fp, { recursive: true, force: true }); } catch {}
+    }
+  }
+}
+function startSync() { if (syncTimer) return; syncTimer = setInterval(() => { syncOnce().catch(() => {}); }, 20000); }
+function stopSync() { if (syncTimer) { clearInterval(syncTimer); syncTimer = null; } populatedDirs.clear(); }
 
 // cloudPath ("/folder/file") -> duong dan file thuc trong o mount
 function mountPathFor(cloudPath) {
