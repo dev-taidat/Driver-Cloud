@@ -338,7 +338,7 @@ async function _startGoogleMount(opts = {}) {
   try {
     await pullCreds(); // lay token+key de tai THANG tu Drive (nhanh)
     await cloudmount.startCloudMount({ root: GMOUNT_ROOT, listDir: listDirRemote, fetchRange });
-    substDrive();      // gan chu cai o dia + ten "Driver Cloud" -> hien nhu 1 O (giong Google Drive)
+    registerNavPane(); // hien muc "Driver Cloud" trong This PC (kieu OneDrive): ten cloud, file online, KHONG hien dung luong may gia
     startMountWatcher(); // dong bo NGUOC: file moi tha vao o -> upload thang len Drive
     if (!silent) {
       new Notification({ title: "Driver Cloud", body: "Đã hiện kho dưới dạng ổ như Google Drive. Đang mở thư mục…" }).show();
@@ -360,9 +360,21 @@ async function _startGoogleMount(opts = {}) {
 }
 function stopGoogleMount() {
   stopMountWatcher();
-  unsubstDrive();
+  unregisterNavPane(); // go muc "Driver Cloud" khoi This PC khi thoat
+  unsubstDrive();      // don ca subst cu neu con sot
   if (cloudmount) { try { cloudmount.stopCloudMount(); } catch {} }
   buildTrayMenu();
+}
+// Go muc "Driver Cloud" khoi khung dieu huong / This PC
+function unregisterNavPane() {
+  if (process.platform !== "win32") return;
+  const ns = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer`;
+  const cmds = [
+    `reg delete "HKCU\\Software\\Classes\\CLSID\\${NAV_GUID}" /f`,
+    `reg delete "${ns}\\Desktop\\NameSpace\\${NAV_GUID}" /f`,
+    `reg delete "${ns}\\MyComputer\\NameSpace\\${NAV_GUID}" /f`,
+  ];
+  exec(cmds.join(" & "), () => {});
 }
 
 // Gan CHU CAI O DIA cho thu muc Cloud Files -> hien nhu 1 o (giong Google Drive), van giu toc do + placeholder
