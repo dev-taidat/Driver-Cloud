@@ -509,7 +509,6 @@ function buildTrayMenu() {
     Menu.buildFromTemplate([
       { label: "Mở Driver Cloud", click: showWin },
       ...(process.platform === "win32" && cloudmount ? [{ label: cloudmount.isStarted() ? (gMountDrive ? `📂 Mở ổ ${gMountDrive}:` : "📂 Mở ổ Driver Cloud") : "💎 Hiện kho thành ổ đĩa", click: () => { if (cloudmount.isStarted()) shell.openPath(gMountDrive ? gMountDrive + ":\\" : GMOUNT_ROOT); else startGoogleMount(); } }] : []),
-      ...(process.platform === "win32" && cloudmount && !cloudmount.hasIdentity() ? [{ label: "✨ Bật menu chuột phải (online/offline)", click: () => ensureIdentity(true) }] : []),
       {
         label: "Tự mount khi mở app", type: "checkbox", checked: autoMount,
         click: (mi) => { autoMount = mi.checked; writePref("autoMount", autoMount); if (autoMount) autoMountIfNeeded(); },
@@ -843,7 +842,7 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
   setupAutoUpdate();
-  setTimeout(ensureIdentity, 3000); // bat menu chuot phai (sparse package) - 1 lan, UAC
+  // (Khong tu cai sparse package nua - de tranh rui ro. Online/offline dung menu trong app.)
 });
 
 // ===== Tu dong cap nhat (electron-updater) =====
