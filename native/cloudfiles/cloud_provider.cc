@@ -301,6 +301,36 @@ static napi_value Dehydrate(napi_env env, napi_callback_info cbi) {
   napi_value out; napi_create_int32(env, (int32_t)hr, &out); return out;
 }
 
+// convert(fullPath, fileId, dehydrate) -> bien file FULL (vua copy vao) thanh placeholder in-sync;
+// dehydrate=true -> giai phong luon (file thanh ONLINE 0 byte). Chay luong nen.
+static napi_value Convert(napi_env env, napi_callback_info cbi) {
+  size_t argc = 3; napi_value argv[3]; napi_get_cb_info(env, cbi, &argc, argv, nullptr, nullptr);
+  std::wstring* pp = new std::wstring(utf8_to_w(env, argv[0]));
+  std::wstring* id = new std::wstring(utf8_to_w(env, argv[1]));
+  bool dehy = false; napi_get_value_bool(env, argv[2], &dehy);
+  std::thread([pp, id, dehy]() {
+    HANDLE h = CreateFileW(pp->c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (h != INVALID_HANDLE_VALUE) {
+      CF_CONVERT_FLAGS flags = CF_CONVERT_FLAG_MARK_IN_SYNC;
+      if (dehy) flags = (CF_CONVERT_FLAGS)(flags | CF_CONVERT_FLAG_DEHYDRATE);
+      USN usn = 0;
+      CfConvertToPlaceholder(h, id->c_str(), (DWORD)((id->size() + 1) * sizeof(wchar_t)), flags, &usn, nullptr);
+      CloseHandle(h);
+    }
+    delete pp; delete id;
+  }).detach();
+  napi_value out; napi_create_int32(env, 0, &out); return out;
+}
+
+// isPlaceholder(path) -> true neu la file cloud ONLINE (placeholder, chua tai) -> watcher bo qua, khong re-upload
+static napi_value IsPlaceholder(napi_env env, napi_callback_info cbi) {
+  size_t argc = 1; napi_value argv[1]; napi_get_cb_info(env, cbi, &argc, argv, nullptr, nullptr);
+  std::wstring p = utf8_to_w(env, argv[0]);
+  DWORD a = GetFileAttributesW(p.c_str());
+  bool ph = (a != INVALID_FILE_ATTRIBUTES) && ((a & FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS) != 0);
+  napi_value out; napi_get_boolean(env, ph, &out); return out;
+}
+
 static napi_value Init(napi_env env, napi_value exports) {
   auto reg = [&](const char* n, napi_callback f) {
     napi_value fn; napi_create_function(env, n, NAPI_AUTO_LENGTH, f, nullptr, &fn);
@@ -310,6 +340,8 @@ static napi_value Init(napi_env env, napi_value exports) {
   reg("unregisterSp", UnregisterSp);
   reg("dehydrate", Dehydrate);
   reg("hydrate", Hydrate);
+  reg("convert", Convert);
+  reg("isPlaceholder", IsPlaceholder);
   reg("connect", Connect);
   reg("createPlaceholder", CreatePlaceholder);
   reg("transferData", TransferData);

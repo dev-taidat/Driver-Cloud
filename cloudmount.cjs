@@ -108,5 +108,9 @@ function mountPathFor(cloudPath) {
 // Dua file OFFLINE (tai ve may, ghim) / ONLINE (giai phong o, van o cloud)
 function setOffline(cloudPath) { loadAddon(); return cf.hydrate(mountPathFor(cloudPath)); }
 function setOnline(cloudPath) { loadAddon(); return cf.dehydrate(mountPathFor(cloudPath)); }
+// File vua copy vao (full) da upload xong -> bien thanh ONLINE placeholder + giai phong o
+function convertToOnline(localPath, fileId) { loadAddon(); try { return cf.convert(localPath, fileId, true); } catch { return -1; } }
+// File cloud ONLINE (placeholder chua tai) -> watcher bo qua, khong re-upload
+function isPlaceholder(localPath) { loadAddon(); try { return !!cf.isPlaceholder(localPath); } catch { return false; } }
 
-module.exports = { startCloudMount, stopCloudMount, unregister, isStarted, setOffline, setOnline };
+module.exports = { startCloudMount, stopCloudMount, unregister, isStarted, setOffline, setOnline, convertToOnline, isPlaceholder };

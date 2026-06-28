@@ -363,7 +363,10 @@ async function startMountWatcher() {
       if (/(\.tmp$|~$|\.crdownload$|\.partial$)/i.test(rel)) return;
       const cloudPath = "/" + rel.split(path.sep).join("/");
       if (knownPaths.has(cloudPath) || uploadingPaths.has(cloudPath)) return;
-      setTimeout(() => maybeUpload(path.join(GMOUNT_ROOT, rel), cloudPath), 1500);
+      const full = path.join(GMOUNT_ROOT, rel);
+      // Bo qua file cloud ONLINE (placeholder) - khong re-upload (tranh treo + lang phi)
+      if (cloudmount.isPlaceholder(full)) return;
+      setTimeout(() => maybeUpload(full, cloudPath), 1500);
     });
   } catch (e) { console.log("[mount watcher] loi:", e && e.message); }
 }
@@ -371,16 +374,19 @@ function stopMountWatcher() { if (mountWatcher) { try { mountWatcher.close(); } 
 async function maybeUpload(full, cloudPath) {
   try {
     if (knownPaths.has(cloudPath) || uploadingPaths.has(cloudPath) || !fs.existsSync(full)) return;
+    if (cloudmount.isPlaceholder(full)) return; // file cloud online -> bo qua
     const st = fs.statSync(full);
     if (st.isDirectory() || st.size === 0) return;
-    // cho copy xong (kich thuoc on dinh)
-    const s1 = st.size; await new Promise((r) => setTimeout(r, 1500));
-    if (!fs.existsSync(full) || fs.statSync(full).size !== s1) { setTimeout(() => maybeUpload(full, cloudPath), 1500); return; }
+    // cho copy xong (kich thuoc on dinh) - khong dung file dang ghi
+    const s1 = st.size; await new Promise((r) => setTimeout(r, 2000));
+    if (!fs.existsSync(full) || fs.statSync(full).size !== s1) { setTimeout(() => maybeUpload(full, cloudPath), 2000); return; }
     uploadingPaths.add(cloudPath);
     const cloudDir = cloudPath.slice(0, cloudPath.lastIndexOf("/")) || "/";
-    await uploadDirect(full, cloudDir);
+    const logical = await uploadDirect(full, cloudDir);
     knownPaths.add(cloudPath);
-    new Notification({ title: "Driver Cloud", body: "Đã tải lên cloud: " + path.basename(full) }).show();
+    // Upload xong -> bien thanh ONLINE placeholder + GIAI PHONG o (full online, het chiem dung luong)
+    if (logical && logical.id) { try { cloudmount.convertToOnline(full, logical.id); } catch {} }
+    new Notification({ title: "Driver Cloud", body: "Đã tải lên cloud + giải phóng ổ: " + path.basename(full) }).show();
   } catch (e) { console.log("[mount upload] loi:", e && e.message); }
   finally { uploadingPaths.delete(cloudPath); }
 }
