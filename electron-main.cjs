@@ -416,6 +416,16 @@ function watchEdit(local) {
   });
 }
 
+// Dua file trong o mount sang OFFLINE (tai ve) / ONLINE (giai phong) - thay cho menu Windows (can ky so)
+ipcMain.handle("mount:offline", (_e, cloudPath) => {
+  try { if (!cloudmount || !cloudmount.isStarted()) return { ok: false, error: "Ổ chưa mount" }; const hr = cloudmount.setOffline(cloudPath); return { ok: hr === 0, hr }; }
+  catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+});
+ipcMain.handle("mount:online", (_e, cloudPath) => {
+  try { if (!cloudmount || !cloudmount.isStarted()) return { ok: false, error: "Ổ chưa mount" }; const hr = cloudmount.setOnline(cloudPath); return { ok: hr === 0, hr }; }
+  catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+});
+
 ipcMain.handle("upload:direct", async (_e, { localPath, dir, replaceId }) => {
   try { const lf = await uploadDirect(localPath, dir || "/", replaceId); return { ok: true, id: lf.id }; }
   catch (e) { return { ok: false, error: String((e && e.message) || e) }; }

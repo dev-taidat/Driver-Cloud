@@ -10,4 +10,7 @@ contextBridge.exposeInMainWorld("dcDesktop", {
   pathForFile: (file) => { try { return webUtils.getPathForFile(file); } catch { return null; } },
   // Upload THANG may<->Drive (nhanh ~10x), bo qua server trung gian
   upload: (localPath, dir, replaceId) => ipcRenderer.invoke("upload:direct", { localPath, dir, replaceId }),
+  // Online/offline tung file trong o mount (thay menu Windows)
+  makeOffline: (cloudPath) => ipcRenderer.invoke("mount:offline", cloudPath),
+  makeOnline: (cloudPath) => ipcRenderer.invoke("mount:online", cloudPath),
 });

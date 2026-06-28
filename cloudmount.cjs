@@ -22,6 +22,7 @@ function loadAddon() {
 
 let rootDir = null, started = false, rootName = "";
 let listDirFn = null, fetchRangeFn = null;
+const SYNC_ROOT_ID = "DriverCloud!{DC10AD00-0000-4000-8000-000000000001}";
 
 // Windows can du lieu file -> goi fetchRange (tai thang tu Drive) roi tra ve
 function onFetch(reqId, identity, offset, length) {
@@ -80,7 +81,10 @@ async function startCloudMount({ root, listDir, fetchRange }) {
   // Don dang ky cu/stale tu lan chay truoc bi crash (tranh "0x17A: da connect boi provider khac")
   try { cf.disconnect(); } catch {}
   try { cf.unregister(rootDir); } catch {}
-  const hrReg = cf.register(rootDir, "Driver Cloud", "1.0");
+  try { cf.unregisterSp(SYNC_ROOT_ID); } catch {}
+  // Dang ky Storage Provider (WinRT) -> menu chuot phai online/offline + icon + muc This PC
+  const icon = (process.execPath || "") + ",0";
+  const hrReg = cf.register(rootDir, "Driver Cloud", "1.0", icon, SYNC_ROOT_ID);
   if (hrReg !== 0) throw new Error("register HRESULT 0x" + (hrReg >>> 0).toString(16));
   const hrConn = cf.connect(rootDir, onFetch, onList);
   // 0x8007017A = da connect roi -> coi nhu thanh cong (idempotent)
@@ -97,4 +101,12 @@ function stopCloudMount() {
 function unregister(root) { loadAddon(); try { return cf.unregister(root || rootDir); } catch { return -1; } }
 function isStarted() { return started; }
 
-module.exports = { startCloudMount, stopCloudMount, unregister, isStarted };
+// cloudPath ("/folder/file") -> duong dan file thuc trong o mount
+function mountPathFor(cloudPath) {
+  return path.join(rootDir, String(cloudPath || "").replace(/^\/+/, "").replace(/\//g, path.sep));
+}
+// Dua file OFFLINE (tai ve may, ghim) / ONLINE (giai phong o, van o cloud)
+function setOffline(cloudPath) { loadAddon(); return cf.hydrate(mountPathFor(cloudPath)); }
+function setOnline(cloudPath) { loadAddon(); return cf.dehydrate(mountPathFor(cloudPath)); }
+
+module.exports = { startCloudMount, stopCloudMount, unregister, isStarted, setOffline, setOnline };

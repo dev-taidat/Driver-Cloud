@@ -121,6 +121,9 @@ function fileCard(f) {
     { icon:"⬇️", label:"Tải về", fn:()=>downloadFile(f.id) },
     // Chi hien trong app desktop: tai ve -> mo editor -> luu la tu dong bo len cloud
     (window.dcDesktop && window.dcDesktop.isDesktop) ? { icon:"🖊️", label:"Mở để sửa (đồng bộ)", fn:async()=>{const r=await window.dcDesktop.edit(f.id,f.name,currentDir); if(r&&r.ok)toast("Đang mở để sửa — lưu là tự đồng bộ lên cloud"); else toast((r&&r.error)||"Không mở được");} } : null,
+    // Online/offline tung file trong o (kieu Google Drive)
+    (window.dcDesktop && window.dcDesktop.isDesktop) ? { icon:"📥", label:"Đưa offline (tải về máy)", fn:async()=>{const r=await window.dcDesktop.makeOffline(f.path); toast(r&&r.ok?"Đang tải về máy (offline)…":"Lỗi: "+((r&&r.error)||""));} } : null,
+    (window.dcDesktop && window.dcDesktop.isDesktop) ? { icon:"☁️", label:"Đưa online (giải phóng ổ)", fn:async()=>{const r=await window.dcDesktop.makeOnline(f.path); toast(r&&r.ok?"Đã giải phóng ổ (online)":"Lỗi: "+((r&&r.error)||""));} } : null,
     { icon:"📂", label:"Chuyển tới…", fn:()=>openMove(f) },
     { icon:"✏️", label:"Đổi tên", fn:async()=>{const n=await askPrompt("Tên mới:",f.name); if(n&&n!==f.name){await api.post("/api/rename",{id:f.id,newName:n});render();}} },
     { icon:"🗑️", label:"Xóa", danger:true, fn:async()=>{await api.post("/api/remove",{id:f.id});toast("Đã chuyển vào thùng rác");render();refreshStorage();} },
