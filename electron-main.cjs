@@ -354,15 +354,31 @@ function startMountWatcher() {
       if (!rel) return;
       if (/(\.tmp$|~$|\.crdownload$|\.partial$)/i.test(rel)) return;
       const cloudPath = "/" + rel.split(path.sep).join("/");
-      if (uploadingPaths.has(cloudPath)) return;
-      if (cloudmount.isCloudPath(cloudPath)) return; // file CUA CLOUD (online/da tai) -> bo qua, khong up lai
       const full = path.join(GMOUNT_ROOT, rel);
+      // XOA trong o: file/folder bien mat + tung la file cloud -> xoa luon tren server
+      if (!fs.existsSync(full)) {
+        if (cloudmount.isCloudPath(cloudPath)) { const info = cloudmount.getInfo(cloudPath); cloudmount.forget(cloudPath); handleMountDelete(cloudPath, info); }
+        return;
+      }
+      if (uploadingPaths.has(cloudPath)) return;
+      if (cloudmount.isCloudPath(cloudPath)) return; // file CUA CLOUD dang ton tai -> bo qua, khong up lai
       if (cloudmount.isPlaceholder(full)) return;    // placeholder online -> bo qua
       setTimeout(() => maybeUpload(full, cloudPath), 1500);
     });
   } catch (e) { console.log("[mount watcher] loi:", e && e.message); }
 }
 function stopMountWatcher() { if (mountWatcher) { try { mountWatcher.close(); } catch {} mountWatcher = null; } }
+// Xoa file/folder trong o -> xoa luon tren server (dong bo 2 chieu)
+async function handleMountDelete(cloudPath, info) {
+  try {
+    const cookie = await getSessionCookie();
+    if (!cookie) return;
+    const h = { Cookie: cookie, "Content-Type": "application/json" };
+    if (info && info.isDir) await fetch(apiBase() + "/api/removeFolder", { method: "POST", headers: h, body: JSON.stringify({ dir: cloudPath }) });
+    else if (info && info.id) await fetch(apiBase() + "/api/remove", { method: "POST", headers: h, body: JSON.stringify({ id: info.id }) });
+    new Notification({ title: "Driver Cloud", body: "Đã xóa khỏi cloud: " + cloudPath.split("/").pop() }).show();
+  } catch (e) { console.log("[mount delete] loi:", e && e.message); }
+}
 async function maybeUpload(full, cloudPath) {
   try {
     if (uploadingPaths.has(cloudPath) || cloudmount.isCloudPath(cloudPath) || !fs.existsSync(full)) return;
@@ -375,7 +391,7 @@ async function maybeUpload(full, cloudPath) {
     uploadingPaths.add(cloudPath);
     const cloudDir = cloudPath.slice(0, cloudPath.lastIndexOf("/")) || "/";
     const logical = await uploadDirect(full, cloudDir);
-    cloudmount.addCloudPath(cloudPath); // gio la file cua cloud -> watcher khong up lai
+    cloudmount.addCloudPath(cloudPath, logical && logical.id, false); // gio la file cua cloud -> watcher khong up lai
     // Upload xong -> bien thanh ONLINE placeholder + GIAI PHONG o (full online, het chiem dung luong)
     if (logical && logical.id) { try { cloudmount.convertToOnline(full, logical.id); } catch {} }
     new Notification({ title: "Driver Cloud", body: "Đã tải lên cloud + giải phóng ổ: " + path.basename(full) }).show();
