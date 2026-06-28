@@ -638,3 +638,44 @@ function toast(msg) { const el = document.createElement("div"); el.className = "
 
 render(); refreshStorage(); loadMe(); loadNotifs();
 setInterval(loadNotifs, 30000); // kiem tra thong bao moi moi 30s
+
+// ===== Bang DONG BO (chi desktop) - hien file dang upload/download giong Google Drive =====
+if (window.dcDesktop && window.dcDesktop.isDesktop && window.dcDesktop.syncActivity) {
+  const st = document.createElement("style");
+  st.textContent = "@keyframes dcspin{to{transform:rotate(360deg)}} #syncWidget:hover{box-shadow:0 4px 16px rgba(0,0,0,.25)}";
+  document.head.appendChild(st);
+  const btn = document.createElement("div");
+  btn.id = "syncWidget";
+  btn.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:95;background:#fff;border:1px solid var(--line,#e0e0e0);border-radius:24px;box-shadow:0 2px 12px rgba(0,0,0,.15);padding:9px 16px;cursor:pointer;font-size:13px;font-weight:600;gap:8px;align-items:center;display:none";
+  btn.innerHTML = `<span id="syncIcon" style="display:inline-block">🔄</span> <span id="syncText">Đồng bộ</span>`;
+  document.body.appendChild(btn);
+  const panel = document.createElement("div");
+  panel.id = "syncPanel";
+  panel.style.cssText = "position:fixed;bottom:66px;right:20px;z-index:95;background:#fff;border:1px solid var(--line,#e0e0e0);border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.22);width:360px;max-height:420px;overflow:auto;padding:14px;display:none";
+  document.body.appendChild(panel);
+  let items = [];
+  function renderSync() {
+    if (!items.length) { panel.innerHTML = `<div style="color:#888;text-align:center;padding:18px">Không có hoạt động đồng bộ</div>`; return; }
+    panel.innerHTML = `<div style="font-weight:700;margin-bottom:10px">Hoạt động đồng bộ</div>` + items.map((it) => {
+      const arrow = it.type === "up" ? "⬆️" : "⬇️";
+      const pct = it.total > 0 ? Math.round((it.loaded / it.total) * 100) : 0;
+      const sub = it.status === "done" ? "✓ Xong" : it.status === "error" ? "✗ Lỗi"
+        : (it.type === "up" ? `Đang tải lên ${pct ? pct + "%" : "…"}` : "Đang tải về…");
+      const col = it.status === "done" ? "#1a8f3c" : it.status === "error" ? "#d33" : "#666";
+      return `<div style="display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #f0f0f0"><span style="font-size:16px">${arrow}</span><div style="flex:1;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px">${escapeHtml(it.name)}</div><div style="font-size:11px;color:${col}">${sub}</div></div></div>`;
+    }).join("");
+  }
+  btn.onclick = () => { panel.style.display = panel.style.display === "none" ? "block" : "none"; renderSync(); };
+  async function pollSync() {
+    try {
+      const r = await window.dcDesktop.syncActivity();
+      items = (r && r.items) || [];
+      const active = (r && r.active) || 0;
+      btn.style.display = (active > 0 || items.length) ? "inline-flex" : "none";
+      $("syncText").textContent = active > 0 ? `Đang đồng bộ ${active}…` : "Đồng bộ";
+      $("syncIcon").style.animation = active > 0 ? "dcspin 1.4s linear infinite" : "none";
+      if (panel.style.display !== "none") renderSync();
+    } catch {}
+  }
+  setInterval(pollSync, 1500); pollSync();
+}

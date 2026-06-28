@@ -228,6 +228,21 @@ async function fetchRange(id, offset, length) {
   const n = fs.readSync(fd, buf, 0, length, offset); fs.closeSync(fd);
   return buf.subarray(0, n);
 }
+// ===== THEO DOI HOAT DONG SYNC (de hien bang "dang dong bo" giong Google Drive) =====
+let _actId = 1;
+const syncActivity = []; // {id, name, type:'up'|'down', status:'active'|'done'|'error', loaded, total, localPath, at}
+function addActivity(o) { o.id = _actId++; o.at = Date.now(); syncActivity.unshift(o); while (syncActivity.length > 60) syncActivity.pop(); return o; }
+function activitySnapshot() {
+  for (const a of syncActivity) {
+    // download (offline) xong khi file khong con la placeholder online
+    if (a.type === "down" && a.status === "active" && a.localPath) {
+      try { if (fs.existsSync(a.localPath) && !cloudmount.isPlaceholder(a.localPath)) a.status = "done"; } catch {}
+    }
+  }
+  const active = syncActivity.filter((a) => a.status === "active").length;
+  return { active, items: syncActivity.slice(0, 40).map((a) => ({ name: a.name, type: a.type, status: a.status, loaded: a.loaded || 0, total: a.total || 0 })) };
+}
+
 // Noi tiep moi upload truc tiep: 1 file da dung 16 luong (no day bang thong) -> lam tung file
 // mot vua nhanh nhat vua tranh no RAM/luong khi copy nhieu file cung luc.
 let _uploadTail = Promise.resolve();
@@ -240,11 +255,18 @@ function serializeUpload(fn) {
 function uploadDirect(localPath, cloudDir, replaceId) {
   return serializeUpload(async () => {
     if (!credsPulled) await pullCreds();
-    const logical = await E.uploader.uploadFile(localPath, engineKey(), { dir: cloudDir || "/", dataDir: SYNC_DIR });
-    const cookie = await getSessionCookie();
-    await fetch(apiBase() + "/api/engine/commit", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify(logical) });
-    if (replaceId) await fetch(apiBase() + "/api/remove", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ id: replaceId }) });
-    return logical;
+    const act = addActivity({ name: path.basename(localPath), type: "up", status: "active", loaded: 0, total: 0 });
+    try {
+      const logical = await E.uploader.uploadFile(localPath, engineKey(), {
+        dir: cloudDir || "/", dataDir: SYNC_DIR,
+        onProgress: (u, t) => { act.loaded = u; act.total = t; },
+      });
+      const cookie = await getSessionCookie();
+      await fetch(apiBase() + "/api/engine/commit", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify(logical) });
+      if (replaceId) await fetch(apiBase() + "/api/remove", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ id: replaceId }) });
+      act.status = "done"; act.loaded = act.total || act.loaded;
+      return logical;
+    } catch (e) { act.status = "error"; throw e; }
   });
 }
 
@@ -456,9 +478,15 @@ function watchEdit(local) {
 
 // Dua file trong o mount sang OFFLINE (tai ve) / ONLINE (giai phong) - thay cho menu Windows (can ky so)
 ipcMain.handle("mount:offline", (_e, cloudPath) => {
-  try { if (!cloudmount || !cloudmount.isStarted()) return { ok: false, error: "Ổ chưa mount" }; const hr = cloudmount.setOffline(cloudPath); return { ok: hr === 0, hr }; }
-  catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  try {
+    if (!cloudmount || !cloudmount.isStarted()) return { ok: false, error: "Ổ chưa mount" };
+    const localPath = path.join(GMOUNT_ROOT, String(cloudPath).replace(/^\/+/, "").replace(/\//g, path.sep));
+    addActivity({ name: String(cloudPath).split("/").pop(), type: "down", status: "active", localPath });
+    const hr = cloudmount.setOffline(cloudPath);
+    return { ok: hr === 0, hr };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 });
+ipcMain.handle("sync:activity", () => { try { return activitySnapshot(); } catch { return { active: 0, items: [] }; } });
 ipcMain.handle("mount:online", (_e, cloudPath) => {
   try { if (!cloudmount || !cloudmount.isStarted()) return { ok: false, error: "Ổ chưa mount" }; const hr = cloudmount.setOnline(cloudPath); return { ok: hr === 0, hr }; }
   catch (e) { return { ok: false, error: String((e && e.message) || e) }; }

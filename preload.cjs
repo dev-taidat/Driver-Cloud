@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld("dcDesktop", {
   // Online/offline tung file trong o mount (thay menu Windows)
   makeOffline: (cloudPath) => ipcRenderer.invoke("mount:offline", cloudPath),
   makeOnline: (cloudPath) => ipcRenderer.invoke("mount:online", cloudPath),
+  // Trang thai dong bo (dang upload/download) de hien bang giong Google Drive
+  syncActivity: () => ipcRenderer.invoke("sync:activity"),
 });
