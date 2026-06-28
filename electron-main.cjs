@@ -346,26 +346,18 @@ function unsubstDrive() {
 
 // ===== Phase 2: dong bo NGUOC - file MOI tha vao o -> upload THANG len Drive =====
 let mountWatcher = null;
-const knownPaths = new Set();   // path cloud da co (de khong up lai khi hydrate)
 const uploadingPaths = new Set();
-async function buildKnownPaths(cloudDir) {
-  const d = await listDirRemote(cloudDir);
-  for (const f of d.files) knownPaths.add((cloudDir === "/" ? "" : cloudDir) + "/" + f.name);
-  for (const fold of d.folders) await buildKnownPaths(fold);
-}
-async function startMountWatcher() {
-  knownPaths.clear();
-  try { await buildKnownPaths("/"); } catch {}
+function startMountWatcher() {
   if (mountWatcher) return;
   try {
     mountWatcher = fs.watch(GMOUNT_ROOT, { recursive: true }, (_ev, rel) => {
       if (!rel) return;
       if (/(\.tmp$|~$|\.crdownload$|\.partial$)/i.test(rel)) return;
       const cloudPath = "/" + rel.split(path.sep).join("/");
-      if (knownPaths.has(cloudPath) || uploadingPaths.has(cloudPath)) return;
+      if (uploadingPaths.has(cloudPath)) return;
+      if (cloudmount.isCloudPath(cloudPath)) return; // file CUA CLOUD (online/da tai) -> bo qua, khong up lai
       const full = path.join(GMOUNT_ROOT, rel);
-      // Bo qua file cloud ONLINE (placeholder) - khong re-upload (tranh treo + lang phi)
-      if (cloudmount.isPlaceholder(full)) return;
+      if (cloudmount.isPlaceholder(full)) return;    // placeholder online -> bo qua
       setTimeout(() => maybeUpload(full, cloudPath), 1500);
     });
   } catch (e) { console.log("[mount watcher] loi:", e && e.message); }
@@ -373,7 +365,7 @@ async function startMountWatcher() {
 function stopMountWatcher() { if (mountWatcher) { try { mountWatcher.close(); } catch {} mountWatcher = null; } }
 async function maybeUpload(full, cloudPath) {
   try {
-    if (knownPaths.has(cloudPath) || uploadingPaths.has(cloudPath) || !fs.existsSync(full)) return;
+    if (uploadingPaths.has(cloudPath) || cloudmount.isCloudPath(cloudPath) || !fs.existsSync(full)) return;
     if (cloudmount.isPlaceholder(full)) return; // file cloud online -> bo qua
     const st = fs.statSync(full);
     if (st.isDirectory() || st.size === 0) return;
@@ -383,7 +375,7 @@ async function maybeUpload(full, cloudPath) {
     uploadingPaths.add(cloudPath);
     const cloudDir = cloudPath.slice(0, cloudPath.lastIndexOf("/")) || "/";
     const logical = await uploadDirect(full, cloudDir);
-    knownPaths.add(cloudPath);
+    cloudmount.addCloudPath(cloudPath); // gio la file cua cloud -> watcher khong up lai
     // Upload xong -> bien thanh ONLINE placeholder + GIAI PHONG o (full online, het chiem dung luong)
     if (logical && logical.id) { try { cloudmount.convertToOnline(full, logical.id); } catch {} }
     new Notification({ title: "Driver Cloud", body: "Đã tải lên cloud + giải phóng ổ: " + path.basename(full) }).show();

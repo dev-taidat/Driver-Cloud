@@ -24,7 +24,11 @@ let rootDir = null, started = false, rootName = "";
 let listDirFn = null, fetchRangeFn = null;
 const SYNC_ROOT_ID = "DriverCloud!{DC10AD00-0000-4000-8000-000000000001}";
 const populatedDirs = new Set(); // cac thu muc da mo -> sync nen cap nhat
+const cloudPaths = new Set();    // path cac file/folder LA CUA CLOUD (de watcher KHONG up lai)
 let syncTimer = null;
+function childCloud(dir, name) { return (dir === "/" ? "" : dir) + "/" + name; }
+function isCloudPath(cloudPath) { return cloudPaths.has(cloudPath); }
+function addCloudPath(cloudPath) { cloudPaths.add(cloudPath); }
 
 // Windows can du lieu file -> goi fetchRange (tai thang tu Drive) roi tra ve
 function onFetch(reqId, identity, offset, length) {
@@ -60,10 +64,12 @@ function onList(reqId, rawPath) {
       for (const folderPath of (d.folders || [])) {
         const name = folderPath.replace(/\/+$/, "").split("/").pop();
         lines.push(name + "\t1\t0\t");
+        cloudPaths.add(childCloud(cloudDir, name));
       }
       for (const f of (d.files || [])) {
         if (f.complete === false) continue;
         lines.push(f.name + "\t0\t" + (f.size || 0) + "\t" + f.id);
+        cloudPaths.add(childCloud(cloudDir, f.name));
       }
       cf.transferPlaceholders(reqId, lines.join("\n"));
     } catch (e) {
@@ -118,6 +124,9 @@ async function syncOnce() {
     const serverFolders = (d.folders || []).map((f) => f.replace(/\/+$/, "").split("/").pop());
     const serverFiles = (d.files || []).filter((f) => f.complete !== false);
     const serverNames = new Set([...serverFolders, ...serverFiles.map((f) => f.name)]);
+    // dong bo danh sach cloud path cho thu muc nay
+    for (const name of serverFolders) cloudPaths.add(childCloud(cloudDir, name));
+    for (const f of serverFiles) cloudPaths.add(childCloud(cloudDir, f.name));
     // THEM: file/folder moi tren server -> tao placeholder online vao o
     for (const name of serverFolders) if (!localSet.has(name)) { try { cf.createPlaceholder(base, name, "", 0, true); } catch {} }
     for (const f of serverFiles) if (!localSet.has(f.name)) { try { cf.createPlaceholder(base, f.name, f.id, f.size || 0, false); } catch {} }
@@ -125,12 +134,12 @@ async function syncOnce() {
     for (const name of localEntries) {
       if (serverNames.has(name)) continue;
       const fp = path.join(base, name);
-      try { if (cf.isPlaceholder(fp)) fs.rmSync(fp, { recursive: true, force: true }); } catch {}
+      try { if (cf.isPlaceholder(fp)) { fs.rmSync(fp, { recursive: true, force: true }); cloudPaths.delete(childCloud(cloudDir, name)); } } catch {}
     }
   }
 }
 function startSync() { if (syncTimer) return; syncTimer = setInterval(() => { syncOnce().catch(() => {}); }, 20000); }
-function stopSync() { if (syncTimer) { clearInterval(syncTimer); syncTimer = null; } populatedDirs.clear(); }
+function stopSync() { if (syncTimer) { clearInterval(syncTimer); syncTimer = null; } populatedDirs.clear(); cloudPaths.clear(); }
 
 // cloudPath ("/folder/file") -> duong dan file thuc trong o mount
 function mountPathFor(cloudPath) {
@@ -144,4 +153,4 @@ function convertToOnline(localPath, fileId) { loadAddon(); try { return cf.conve
 // File cloud ONLINE (placeholder chua tai) -> watcher bo qua, khong re-upload
 function isPlaceholder(localPath) { loadAddon(); try { return !!cf.isPlaceholder(localPath); } catch { return false; } }
 
-module.exports = { startCloudMount, stopCloudMount, unregister, isStarted, setOffline, setOnline, convertToOnline, isPlaceholder };
+module.exports = { startCloudMount, stopCloudMount, unregister, isStarted, setOffline, setOnline, convertToOnline, isPlaceholder, isCloudPath, addCloudPath };
