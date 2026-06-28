@@ -98,38 +98,23 @@ static void CALLBACK OnFetchPlaceholders(const CF_CALLBACK_INFO* info, const CF_
 }
 
 // ================= ham xuat JS =================
-// register(rootPath, name, ver, iconResource, id) -> HRESULT
-// Dung StorageProviderSyncRootManager (WinRT) = cach OneDrive/Google: cho menu chuot phai
-// "Free up space"/"Always keep on this device" + icon may/tick + muc trong This PC.
-// Chay tren luong MTA rieng de tranh deadlock STA cua tien trinh Electron.
+// register(rootPath, name, ver, [icon], [id]) -> HRESULT
+// Dang ky sync root goc (CfRegisterSyncRoot) - du cho file ops (placeholder/hydrate/enumerate).
+// KHONG dung StorageProvider (no tao them 1 muc "Driver Cloud" trong nav pane -> trung voi o subst Z:;
+// va menu chuot phai cua no can ky so moi hien -> khong loi ich). Chi can 1 o Z: (subst).
 static napi_value Register(napi_env env, napi_callback_info cbi) {
   size_t argc = 5; napi_value argv[5]; napi_get_cb_info(env, cbi, &argc, argv, nullptr, nullptr);
-  std::wstring root = utf8_to_w(env, argv[0]), name = utf8_to_w(env, argv[1]), ver = utf8_to_w(env, argv[2]),
-               icon = utf8_to_w(env, argv[3]), id = utf8_to_w(env, argv[4]);
-  HRESULT hr = E_FAIL;
-  std::thread t([&]() {
-    try {
-      winrt::init_apartment(winrt::apartment_type::multi_threaded);
-      auto folder = StorageFolder::GetFolderFromPathAsync(winrt::hstring(root)).get();
-      StorageProviderSyncRootInfo info;
-      info.Id(winrt::hstring(id));
-      info.Path(folder);
-      info.DisplayNameResource(winrt::hstring(name));
-      info.IconResource(winrt::hstring(icon));
-      info.Version(winrt::hstring(ver));
-      info.HydrationPolicy(StorageProviderHydrationPolicy::Full);
-      info.HydrationPolicyModifier(StorageProviderHydrationPolicyModifier::None);
-      info.PopulationPolicy(StorageProviderPopulationPolicy::Full);
-      info.InSyncPolicy(StorageProviderInSyncPolicy::Default);
-      info.HardlinkPolicy(StorageProviderHardlinkPolicy::None);
-      info.ShowSiblingsAsGroup(false);
-      info.ProtectionMode(StorageProviderProtectionMode::Unknown);
-      StorageProviderSyncRootManager::Register(info);
-      hr = S_OK;
-    } catch (winrt::hresult_error const& e) { hr = e.code(); }
-    catch (...) { hr = E_FAIL; }
-  });
-  t.join();
+  std::wstring root = utf8_to_w(env, argv[0]), name = utf8_to_w(env, argv[1]), ver = utf8_to_w(env, argv[2]);
+  CF_SYNC_REGISTRATION reg = {}; reg.StructSize = sizeof(reg);
+  reg.ProviderName = name.c_str(); reg.ProviderVersion = ver.c_str();
+  CF_SYNC_POLICIES pol = {}; pol.StructSize = sizeof(pol);
+  pol.Hydration.Primary = CF_HYDRATION_POLICY_PARTIAL;
+  pol.Hydration.Modifier = CF_HYDRATION_POLICY_MODIFIER_NONE;
+  pol.Population.Primary = CF_POPULATION_POLICY_PARTIAL; // on-demand: Windows goi FETCH_PLACEHOLDERS
+  pol.Population.Modifier = CF_POPULATION_POLICY_MODIFIER_NONE;
+  pol.InSync = CF_INSYNC_POLICY_TRACK_ALL;
+  pol.HardLink = CF_HARDLINK_POLICY_NONE;
+  HRESULT hr = CfRegisterSyncRoot(root.c_str(), &reg, &pol, CF_REGISTER_FLAG_UPDATE);
   napi_value out; napi_create_int32(env, (int32_t)hr, &out); return out;
 }
 
